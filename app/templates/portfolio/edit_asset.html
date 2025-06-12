@@ -1,0 +1,112 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8 col-lg-7">
+        <div class="card mb-4">
+            <div class="card-header">
+                <h3 class="mb-0">Edytuj: {{ asset.name }}</h3>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('main.edit_asset', asset_id=asset.id) }}">
+                    <div class="form-group">
+                        <label for="asset_name">Nazwa</label>
+                        <input type="text" class="form-control" id="asset_name" name="asset_name" 
+                               value="{{ request.form.asset_name if form_data else asset.name }}" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="asset_category_id">Kategoria</label>
+                        <select name="asset_category_id" id="asset_category_id" class="form-control" required>
+                            {% for cat in asset_categories %}
+                            <option value="{{ cat.id }}" 
+                                    {% if (form_data and form_data.asset_category_id == cat.id|string) or (not form_data and asset.asset_category_id == cat.id) %}selected{% endif %}>
+                                {{ cat.name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group col-md-6">
+                            <label for="current_value">Aktualna wartość</label>
+                            <input type="number" step="0.01" class="form-control" id="current_value" name="current_value" 
+                                   value="{{ request.form.current_value if form_data else asset.current_value }}" required>
+                        </div>
+                        <div class="form-group col-md-6">
+                            <label for="currency">Waluta</label>
+                            <input type="text" class="form-control" id="currency" name="currency" 
+                                   value="{{ request.form.currency if form_data else asset.currency }}" required>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group col-md-6">
+                            <label for="quantity">Ilość (opcjonalnie)</label>
+                            <input type="number" step="any" class="form-control" id="quantity" name="quantity" 
+                                   value="{{ request.form.quantity if form_data else (asset.quantity if asset.quantity is not none else '') }}">
+                        </div>
+                         <div class="form-group col-md-6">
+                            <label for="ticker">Ticker (opcjonalnie)</label>
+                            <input type="text" class="form-control" id="ticker" name="ticker" 
+                                   value="{{ request.form.ticker if form_data else (asset.ticker or '') }}">
+                        </div>
+                    </div>
+                    <p class="text-muted"><small>Ostatnia aktualizacja: {{ asset.last_updated.strftime('%Y-%m-%d %H:%M') if asset.last_updated else 'Brak danych' }}</small></p>
+                    <button type="submit" class="btn btn-primary">Zapisz</button>
+                    <a href="{{ url_for('main.portfolio_index', portfolio_id=asset.portfolio_id) }}" class="btn btn-secondary ml-2">Anuluj</a>
+                </form>
+            </div>
+        </div>
+
+        <!-- SEKCJA HISTORII WARTOŚCI AKTYWA (jeśli AssetValueHistory jest używane) -->
+        {% if asset_value_history_entries %}
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Historia: {{ asset.name }}</h5>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm table-striped table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>Data Zapisu</th>
+                                <th class="text-right">Wartość</th>
+                                <th class="text-center" style="width: 80px;">Akcja</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for entry in asset_value_history_entries %}
+                            <tr>
+                                <td>{{ entry.date.strftime('%Y-%m-%d') }}</td> {# Zakładając, że AssetValueHistory.date to tylko data #}
+                                <td class="text-right">{{ "%.2f"|format(entry.value) }} {{ asset.currency }}</td>
+                                <td class="text-center">
+                                    <form method="POST" 
+                                          action="{{ url_for('main.delete_asset_value_history_entry', history_id=entry.id) }}" 
+                                          style="display: inline-block;" 
+                                          onsubmit="return confirm('Czy na pewno chcesz usunąć ten wpis historii wartości? Data jest widoczna w tabeli.');">
+                                        <button type="submit" class="btn btn-xs btn-outline-danger p-1" title="Usuń wpis">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-x-circle" viewBox="0 0 16 16">
+                                                <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14m0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16"/>
+                                                <path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708"/>
+                                            </svg>
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% if asset.value_history.count() > 10 %} {# Użyj .count() dla dynamicznej relacji #}
+                <div class="card-footer text-muted text-center">
+                    <small>Wyświetlono 10 ostatnich wpisów historii.</small>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% elif asset.id %} {# Dodaj warunek, aby pokazać komunikat tylko jeśli asset istnieje #}
+        <div class="alert alert-light text-center" role="alert">
+            Brak zapisanej historii wartości dla tego aktywa. Zmiany wartości będą tu logowane.
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

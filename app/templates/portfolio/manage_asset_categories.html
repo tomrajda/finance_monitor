@@ -1,0 +1,52 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<h2>Kategorie aktywów</h2>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header"><h4>Dodaj kategorię</h4></div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('main.manage_asset_categories') }}">
+                    <div class="form-group">
+                        <label for="category_name">Nazwa kategorii</label>
+                        <input type="text" name="category_name" id="category_name" class="form-control" required 
+                               placeholder="Np. Akcje PL, Obligacje, ETF Świat">
+                    </div>
+                    <button type="submit" class="btn btn-primary">Dodaj</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header"><h4>Istniejące kategorie</h4></div>
+            <div class="card-body">
+                {% if asset_categories %}
+                <ul class="list-group">
+                    {% for category in asset_categories %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        {{ category.name }}
+                        <!-- W przyszłości można dodać opcję usuwania, jeśli kategoria nie jest używana -->
+                        <!-- {% if not category.assets %}
+                        <form method="POST" action="#" style="display: inline;">
+                            <button type="submit" class="btn btn-sm btn-danger">Usuń</button>
+                        </form>
+                        {% else %}
+                         <small class="text-muted">(używana)</small>
+                        {% endif %} -->
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="text-muted">Brak zdefiniowanych kategorii aktywów.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+<div class="mt-3">
+    <a href="{{ url_for('main.portfolio_index') }}" class="btn btn-outline-secondary">« Wróć do portfela</a>
+</div>
+{% endblock %}

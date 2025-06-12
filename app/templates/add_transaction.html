@@ -1,0 +1,366 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<style>
+    /* ... (style CSS bez zmian) ... */
+    .choice-btn-group .btn { margin-right: 5px; margin-bottom: 5px; }
+    .choice-btn-group .btn.active { background-color: var(--primary-color) !important; color: white !important; border-color: var(--primary-color-darker) !important; box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25); }
+    .emoji-btn { font-size: 1.2em; margin-right: 0.3em; }
+    .date-control-group { display: flex; align-items: center; }
+    .date-control-group .form-control { flex-grow: 1; }
+    .date-control-group .btn { margin-left: 0.5rem; flex-shrink: 0; }
+</style>
+
+<div class="row justify-content-center">
+    <div class="col-md-8 col-lg-7">
+        <div class="card">
+            <div class="card-header"><h2 class="mb-0">nowa transakcja</h2></div> <!-- Zmieniono tekst -->
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('main.add_transaction') }}" id="transactionForm">
+                    <div class="form-group">
+                        <label for="transaction_type">Typ transakcji</label>
+                        <select name="transaction_type" id="transaction_type" class="form-control" required>
+                            <option value="expense" {% if form_data.transaction_type == 'expense' or not form_data %}selected{% endif %}>Wydatek</option>
+                            <option value="income" {% if form_data.transaction_type == 'income' %}selected{% endif %}>Przychód</option>
+                        </select>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group col-md-7">
+                            <label for="date">Data</label>
+                            <div class="date-control-group">
+                                <input type="date" name="date" id="date" class="form-control" value="{{ form_data.date if form_data.date else today_date }}" required>
+                                <button type="button" id="prevMonthBtn" class="btn btn-sm btn-outline-secondary" title="Ustaw na pierwszy dzień poprzedniego miesiąca">Poprzedni miesiąc</button>
+                            </div>
+                        </div>
+                        <div class="form-group col-md-5">
+                            <label for="amount">Kwota (PLN)</label>
+                            <input type="number" step="0.01" name="amount" id="amount" class="form-control" value="{{ form_data.amount if form_data else '' }}" required>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Konto</label>
+                        <div id="accountChoiceGroup" class="btn-group choice-btn-group d-flex flex-wrap" role="group" aria-label="Wybór konta">
+                            {% for acc_btn in account_buttons_data %}
+                            <button type="button" class="btn btn-outline-secondary" data-account-id="{{ acc_btn.id }}" data-account-name="{{ acc_btn.name }}">
+                                <span class="emoji-btn">{{ acc_btn.emoji }}</span> {{ acc_btn.name }}
+                            </button>
+                            {% endfor %}
+                        </div>
+                        <input type="hidden" name="selected_account_id" id="selected_account_id" value="{{ form_data.selected_account_id if form_data else '' }}" required>
+                    </div>
+
+                    <div id="expense_fields">
+                        <div class="form-group">
+                            <label for="description">Opis wydatku</label>
+                            <input type="text" name="description" id="description" class="form-control" value="{{ form_data.description if form_data else '' }}" placeholder="Np. Zakupy spożywcze, Bilet do kina">
+                        </div>
+                        <div class="form-group" id="expense_person_source_group">
+
+                            <div id="expensePersonChoiceGroup" class="btn-group choice-btn-group d-flex flex-wrap" role="group" aria-label="Źródło wydatku">
+                                {% for person_btn in person_buttons_data %}
+
+                                {% endfor %}
+                            </div>
+                            <input type="hidden" name="selected_expense_person" id="selected_expense_person" value="{{ form_data.selected_expense_person if form_data else '' }}">
+                        </div>
+                        <div class="form-group">
+                            <label for="category_id">Kategoria wydatku</label>
+                            <select name="category_id" id="category_id" class="form-control">
+                                <option value="">-- Wybierz kategorię --</option>
+                                {% for cat in categories %}
+                                    <option value="{{ cat.id }}" 
+                                            data-is-shared="{{ 'true' if cat.is_shared_expense else 'false' }}"
+                                            {% if form_data and form_data.category_id == cat.id|string %}selected{% endif %}>
+                                        {{ cat.name }}
+                                    </option>
+                                {% endfor %}
+                                <option value="new_category">-- Dodaj nową kategorię --</option>
+                            </select>
+                        </div>
+                        <div class="form-group" id="new_category_group" style="display: none;">
+                            <label for="new_category_name">Nazwa nowej kategorii:</label>
+                            <input type="text" name="new_category_name" id="new_category_name" class="form-control" value="{{ form_data.new_category_name if form_data else '' }}">
+                        </div>
+                        <div class="form-group">
+                             <button type="button" id="openAiHelperBtn" class="btn btn-outline-info btn-sm">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-lightbulb mr-1" viewBox="0 0 16 16"><path d="M2 6a6 6 0 1 1 10.174 4.31c-.203.196-.359.4-.453.619l-.762 1.769A.5.5 0 0 1 10.5 13a.5.5 0 0 1 0 1 .5.5 0 0 1 0 1l-.224.447a1 1 0 0 1-.894.553H6.618a1 1 0 0 1-.894-.553L5.5 15a.5.5 0 0 1 0-1 .5.5 0 0 1 0-1 .5.5 0 0 1-.46-.302l-.761-1.77a1.964 1.964 0 0 0-.453-.618A5.984 5.984 0 0 1 2 6zm6-5a5 5 0 0 0-3.479 8.592c.263.254.514.564.676.941L5.83 12h4.342l.632-1.467c.162-.377.413-.687.676-.941A5 5 0 0 0 8 1z"/></svg>
+                                Porada AI
+                            </button>
+                        </div>
+                        <div id="aiHelperSection" class="ai-suggestion-container mt-2" style="display: none;">
+                            <div class="form-group"><label for="aiDescriptionInput">Opisz wydatek dla AI (np. tytuł przelewu):</label><textarea id="aiDescriptionInput" class="form-control form-control-sm" rows="2"></textarea></div>
+                            <button type="button" id="getAiSuggestionBtn" class="btn btn-primary btn-sm mb-2">Zapytaj</button>
+                            <div id="aiSuggestionResultBox"></div>
+                        </div>
+                    </div>
+
+                    <div id="income_fields" style="display:none;">
+                         <div class="form-group">
+                            <label for="description_income">Opis przychodu (opcjonalny):</label>
+                            <input type="text" name="description_income" id="description_income" class="form-control" value="{{ form_data.description_income if form_data else '' }}">
+                        </div>
+                        <div class="form-group">
+                            <label>Dla kogo przychód:</label>
+                            <div id="incomePersonChoiceGroup" class="btn-group choice-btn-group d-flex flex-wrap" role="group" aria-label="Odbiorca przychodu">
+                                {% for person_btn in person_buttons_data %}
+                                <button type="button" class="btn btn-outline-secondary" data-person-value="{{ person_btn.value }}">
+                                   <span class="emoji-btn">{{ person_btn.emoji }}</span> {{ person_btn.text }}
+                                </button>
+                                {% endfor %}
+                            </div>
+                            <input type="hidden" name="selected_income_person" id="selected_income_person" value="{{ form_data.selected_income_person if form_data else '' }}" required>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary btn-block mt-3">Dodaj</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const transactionTypeSelect = document.getElementById('transaction_type');
+    const expenseFields = document.getElementById('expense_fields');
+    const incomeFields = document.getElementById('income_fields');
+    const categorySelect = document.getElementById('category_id');
+    const newCategoryGroup = document.getElementById('new_category_group');
+    const newCategoryInput = document.getElementById('new_category_name');
+    
+    const accountChoiceGroup = document.getElementById('accountChoiceGroup');
+    const hiddenAccountIdInput = document.getElementById('selected_account_id');
+    
+    const expensePersonSourceGroupDiv = document.getElementById('expense_person_source_group');
+    const expensePersonChoiceGroup = document.getElementById('expensePersonChoiceGroup');
+    const hiddenExpensePersonInput = document.getElementById('selected_expense_person');
+    
+    const incomePersonChoiceGroup = document.getElementById('incomePersonChoiceGroup');
+    const hiddenIncomePersonInput = document.getElementById('selected_income_person');
+
+    const mainDescriptionInput = document.getElementById('description'); 
+    const openAiHelperBtn = document.getElementById('openAiHelperBtn');
+    const aiHelperSection = document.getElementById('aiHelperSection');
+    const aiDescriptionInput = document.getElementById('aiDescriptionInput');
+    const getAiSuggestionBtn = document.getElementById('getAiSuggestionBtn');
+    const aiSuggestionResultBox = document.getElementById('aiSuggestionResultBox');
+
+    const dateInput = document.getElementById('date');
+    const prevMonthBtn = document.getElementById('prevMonthBtn');
+
+    // Użycie stałych przekazanych z Pythona
+    const ACCOUNT_NAME_TOMEK_JS = "{{ ACCOUNT_NAME_TOMEK }}";
+    const ACCOUNT_NAME_TOCKA_JS = "{{ ACCOUNT_NAME_TOCKA }}";
+    const ACCOUNT_NAME_WSPOLNE_JS = "{{ ACCOUNT_NAME_WSPOLNE }}";
+    const PERSON_TOMEK_JS = "{{ PERSON_TOMEK }}";
+    const PERSON_TOCKA_JS = "{{ PERSON_TOCKA }}";
+
+
+    function setupChoiceButtons(buttonGroup, hiddenInput) {
+        // ... (bez zmian)
+        const buttons = buttonGroup.querySelectorAll('.btn');
+        buttons.forEach(button => {
+            button.addEventListener('click', function() {
+                buttons.forEach(btn => btn.classList.remove('active'));
+                this.classList.add('active');
+                hiddenInput.value = this.dataset.accountId || this.dataset.personValue;
+                
+                if (hiddenInput.id === 'selected_account_id') {
+                    handleAccountChange();
+                }
+            });
+        });
+        if (hiddenInput.value) {
+            buttons.forEach(button => {
+                if ((button.dataset.accountId && button.dataset.accountId === hiddenInput.value) || 
+                    (button.dataset.personValue && button.dataset.personValue === hiddenInput.value)) {
+                    button.classList.add('active');
+                }
+            });
+        }
+    }
+
+    setupChoiceButtons(accountChoiceGroup, hiddenAccountIdInput);
+    setupChoiceButtons(expensePersonChoiceGroup, hiddenExpensePersonInput);
+    setupChoiceButtons(incomePersonChoiceGroup, hiddenIncomePersonInput);
+
+    function toggleFields() {
+        // ... (bez zmian)
+        const isIncome = transactionTypeSelect.value === 'income';
+        expenseFields.style.display = isIncome ? 'none' : 'block';
+        incomeFields.style.display = isIncome ? 'block' : 'none';
+        
+        categorySelect.required = !isIncome;
+        hiddenIncomePersonInput.required = isIncome;
+
+        if (!isIncome) { 
+            handleAccountChange(); 
+            handleCategoryChange();
+        } else { 
+            openAiHelperBtn.style.display = 'none';
+            aiHelperSection.style.display = 'none';
+            newCategoryGroup.style.display = 'none';
+            expensePersonSourceGroupDiv.style.display = 'none';
+            hiddenExpensePersonInput.required = false;
+        }
+        prevMonthBtn.style.display = 'inline-block';
+    }
+
+    function handleCategoryChange() {
+        // ... (bez zmian)
+        if (categorySelect.value === 'new_category') {
+            newCategoryGroup.style.display = 'block';
+            newCategoryInput.required = true;
+        } else {
+            newCategoryGroup.style.display = 'none';
+            newCategoryInput.required = false;
+        }
+    }
+
+    function handleAccountChange() {
+        // Ta funkcja została zaktualizowana w poprzedniej odpowiedzi, aby poprawnie ukrywać
+        // expensePersonSourceGroupDiv i ustawiać osobę. Upewnij się, że masz tę wersję.
+        const selectedAccountBtn = accountChoiceGroup.querySelector('.btn.active');
+        const accountName = selectedAccountBtn ? selectedAccountBtn.dataset.accountName : '';
+        const isExpense = transactionTypeSelect.value === 'expense';
+
+        aiHelperSection.style.display = 'none'; 
+
+        expensePersonSourceGroupDiv.style.display = 'none';
+        openAiHelperBtn.style.display = 'none';
+        hiddenExpensePersonInput.required = false; 
+        hiddenExpensePersonInput.value = ''; 
+        expensePersonChoiceGroup.querySelectorAll('.btn').forEach(btn => btn.classList.remove('active'));
+
+        Array.from(categorySelect.options).forEach(option => {
+            if (option.value) option.style.display = ''; 
+        });
+        categorySelect.disabled = false;
+
+        if (isExpense) {
+            if (accountName === ACCOUNT_NAME_WSPOLNE_JS) {
+                Array.from(categorySelect.options).forEach(option => {
+                    if (option.value && option.value !== 'new_category') {
+                        option.style.display = (option.dataset.isShared === 'true') ? '' : 'none';
+                    }
+                });
+                const currentSelectedCatOption = categorySelect.options[categorySelect.selectedIndex];
+                if (currentSelectedCatOption && currentSelectedCatOption.style.display === 'none') {
+                    categorySelect.value = '';
+                }
+            } else if (accountName === ACCOUNT_NAME_TOMEK_JS) {
+                hiddenExpensePersonInput.value = PERSON_TOMEK_JS;
+                openAiHelperBtn.style.display = 'inline-block';
+            } else if (accountName === ACCOUNT_NAME_TOCKA_JS) {
+                hiddenExpensePersonInput.value = PERSON_TOCKA_JS;
+                openAiHelperBtn.style.display = 'inline-block';
+            } else if (accountName) { 
+                expensePersonSourceGroupDiv.style.display = 'block';
+                hiddenExpensePersonInput.required = true; 
+                openAiHelperBtn.style.display = 'inline-block';
+            } else { 
+                 expensePersonSourceGroupDiv.style.display = 'block';
+                 hiddenExpensePersonInput.required = true;
+                 openAiHelperBtn.style.display = 'inline-block';
+            }
+            handleCategoryChange();
+        }
+        prevMonthBtn.style.display = 'inline-block'; 
+    }
+    
+    openAiHelperBtn.addEventListener('click', function() {
+        // ... (bez zmian) ...
+        aiHelperSection.style.display = (aiHelperSection.style.display === 'none' || aiHelperSection.style.display === '') ? 'block' : 'none';
+        if (aiHelperSection.style.display === 'block') {
+            aiDescriptionInput.focus();
+            aiSuggestionResultBox.innerHTML = ''; 
+        }
+    });
+
+    getAiSuggestionBtn.addEventListener('click', async function() {
+        // ... (bez zmian) ...
+        const descriptionForAI = aiDescriptionInput.value.trim();
+        if (!descriptionForAI) {
+            aiSuggestionResultBox.innerHTML = `<p class="text-warning mb-0">Wpisz opis wydatku dla AI.</p>`;
+            aiDescriptionInput.focus(); return;
+        }
+        aiSuggestionResultBox.innerHTML = `<p class="text-info mb-0">Przetwarzanie sugestii AI...</p>`;
+        this.disabled = true; 
+        try {
+            const response = await fetch("{{ url_for('main.api_suggest_category') }}", {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ description: descriptionForAI })
+            });
+            if (!response.ok) { const errorData = await response.json(); throw new Error(errorData.error || `Błąd: ${response.status}`); }
+            const data = await response.json(); 
+            let suggestionHtml = "";
+            if (data.is_new_suggestion) {
+                suggestionHtml = `<p>AI sugeruje <strong>NOWĄ</strong> kategorię: <mark>${data.category_name}</mark></p>`;
+                suggestionHtml += `<button type="button" class="btn btn-sm btn-success mr-2" id="acceptNewAiSuggestionBtn">Użyj i dodaj</button>`;
+            } else {
+                suggestionHtml = `<p>AI sugeruje kategorię: <mark>${data.category_name}</mark></p>`;
+                suggestionHtml += `<button type="button" class="btn btn-sm btn-primary mr-2" id="acceptExistingAiSuggestionBtn">Ustaw</button>`;
+            }
+            suggestionHtml += `<button type="button" class="btn btn-sm btn-outline-secondary" id="cancelAiSuggestionBtn">Anuluj</button>`;
+            aiSuggestionResultBox.innerHTML = suggestionHtml;
+
+            if (document.getElementById('acceptNewAiSuggestionBtn')) {
+                document.getElementById('acceptNewAiSuggestionBtn').addEventListener('click', function() {
+                    categorySelect.value = 'new_category'; newCategoryInput.value = data.category_name; 
+                    handleCategoryChange(); newCategoryInput.focus(); aiHelperSection.style.display = 'none'; 
+                });
+            }
+            if (document.getElementById('acceptExistingAiSuggestionBtn')) {
+                document.getElementById('acceptExistingAiSuggestionBtn').addEventListener('click', function() {
+                    let optionExists = Array.from(categorySelect.options).some(opt => opt.value === data.category_id.toString());
+                    if (!optionExists && data.category_id) { 
+                        const newOption = new Option(data.category_name, data.category_id, true, true);
+                        categorySelect.add(newOption, categorySelect.options[categorySelect.options.length -1]);
+                    }
+                    categorySelect.value = data.category_id; 
+                    handleCategoryChange(); aiHelperSection.style.display = 'none'; 
+                });
+            }
+            document.getElementById('cancelAiSuggestionBtn').addEventListener('click', function() {
+                aiSuggestionResultBox.innerHTML = ''; 
+            });
+        } catch (error) {
+            console.error('Błąd API sugestii:', error);
+            aiSuggestionResultBox.innerHTML = `<p class="text-danger mb-0">Błąd sugestii: ${error.message}.</p>`;
+        } finally { this.disabled = false; }
+    });
+
+    if (prevMonthBtn && dateInput) {
+        prevMonthBtn.addEventListener('click', function() {
+            // ... (bez zmian) ...
+            const currentDateStr = dateInput.value;
+            if (currentDateStr) {
+                const currentDate = new Date(currentDateStr + "T00:00:00"); 
+                currentDate.setDate(1); 
+                currentDate.setMonth(currentDate.getMonth() - 1); 
+                const year = currentDate.getFullYear();
+                const month = (currentDate.getMonth() + 1).toString().padStart(2, '0');
+                const day = '01';
+                dateInput.value = `${year}-${month}-${day}`;
+            } else {
+                let prevMonthDate = new Date(); prevMonthDate.setDate(1); 
+                prevMonthDate.setMonth(prevMonthDate.getMonth() - 1);
+                const year = prevMonthDate.getFullYear();
+                const month = (prevMonthDate.getMonth() + 1).toString().padStart(2, '0');
+                const day = '01'; dateInput.value = `${year}-${month}-${day}`;
+            }
+        });
+    }
+
+    transactionTypeSelect.addEventListener('change', toggleFields);
+    categorySelect.addEventListener('change', handleCategoryChange);
+    
+    toggleFields(); 
+    handleAccountChange(); 
+});
+</script>
+{% endblock %}

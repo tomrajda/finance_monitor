@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Opcjonalny tytuł dla dostępności -->
+  <title>Favicon Miś</title>
+
+  <text
+    x="50%"               <!-- Poziomo na środku viewBox -->
+    y="50%"               <!-- Pionowo na środku viewBox (linia bazowa) -->
+    font-size="58"        <!-- Rozmiar czcionki, prawie wypełnia viewBox -->
+    font-family="sans-serif"
+    text-anchor="middle"    <!-- Kotwica tekstu na środku znaku względem x -->
+    dominant-baseline="middle" <!-- Wyrównuje środek znaku (pionowo) do y -->
+  >🧸</text>
+</svg>

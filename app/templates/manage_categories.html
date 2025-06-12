@@ -1,0 +1,56 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<h2>Zarządzaj Kategoriami Wydatków</h2>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header"><h4>Dodaj Nową Kategorię</h4></div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('main.manage_categories') }}">
+                    <div class="form-group">
+                        <label for="category_name">Nazwa Kategorii:</label>
+                        <input type="text" name="category_name" id="category_name" class="form-control" required>
+                    </div>
+                    <div class="form-group form-check">
+                        <input type="checkbox" class="form-check-input" id="is_shared_expense" name="is_shared_expense">
+                        <label class="form-check-label" for="is_shared_expense">Kategoria wspólna (dzielona)</label>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Dodaj Kategorię</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header"><h4>Istniejące Kategorie</h4></div>
+            <div class="card-body">
+                {% if categories %}
+                <ul class="list-group">
+                    {% for category in categories %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <span>
+                            {{ category.name }}
+                            {% if category.is_shared_expense %}
+                                <span class="badge badge-info ml-2">Wspólna</span>
+                            {% endif %}
+                        </span>
+                        {% if not category.transactions %}
+                        <form method="POST" action="{{ url_for('main.delete_category', category_id=category.id) }}" style="display: inline;" onsubmit="return confirm('Czy na pewno chcesz usunąć tę kategorię?');">
+                            <button type="submit" class="btn btn-sm btn-danger">Usuń</button>
+                        </form>
+                        {% else %}
+                         <small class="text-muted">(używana)</small>
+                        {% endif %}
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p>Brak zdefiniowanych kategorii.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

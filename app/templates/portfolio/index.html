@@ -1,0 +1,208 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>portfel inwestycyjny</h2>
+    <div>
+        <a href="{{ url_for('main.add_portfolio') }}" class="btn btn-success mr-2">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-plus-circle-fill mr-1" viewBox="0 0 16 16"><path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0M8.5 4.5a.5.5 0 0 0-1 0v3h-3a.5.5 0 0 0 0 1h3v3a.5.5 0 0 0 1 0v-3h3a.5.5 0 0 0 0-1h-3z"/></svg>
+            Dodaj portfel
+        </a>
+        <a href="{{ url_for('main.manage_asset_categories') }}" class="btn btn-outline-secondary">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-tags-fill mr-1" viewBox="0 0 16 16"><path d="M2 2a1 1 0 0 1 1-1h4.586a1 1 0 0 1 .707.293l7 7a1 1 0 0 1 0 1.414l-4.586 4.586a1 1 0 0 1-1.414 0l-7-7A1 1 0 0 1 2 6.586V2zm3.5 1a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3"/></svg>
+            Kategorie aktywów
+        </a>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card text-center border-primary shadow-sm">
+            <div class="card-body p-3">
+                <h5 class="card-title text-primary mb-1">wszystkie portfele</h5>
+                <p class="card-text display-4 font-weight-bold text-dark mb-0">
+                    {{ "%.2f"|format(grand_total_all_portfolios_value) }} <span style="font-size: 0.5em; vertical-align: super;">PLN</span>
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if portfolios %}
+<!-- Formularz wyboru portfela i przyciski akcji dla wybranego portfela -->
+<div class="d-md-flex align-items-center mb-3"> {# Użyj flexbox dla lepszego ułożenia w linii na większych ekranach #}
+    <form method="GET" action="{{ url_for('main.portfolio_index') }}" class="form-inline mr-md-3 mb-2 mb-md-0">
+        <div class="form-group">
+            <label for="portfolio_select" class="mr-2">Wybierz portfel:</label>
+            <select name="portfolio_id" id="portfolio_select" class="form-control form-control-sm" onchange="this.form.submit()">
+                <option value="">-- Wybierz --</option>
+                {% for p in portfolios %}
+                <option value="{{ p.id }}" {% if selected_portfolio and p.id == selected_portfolio.id %}selected{% endif %}>{{ p.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </form>
+
+    {% if selected_portfolio %}
+    <div class="mt-2 mt-md-0"> {# Kontener na przyciski akcji, aby były obok siebie #}
+        <a href="{{ url_for('main.edit_portfolio', portfolio_id=selected_portfolio.id) }}" class="btn btn-sm btn-outline-primary mr-2">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-sliders mr-1" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M11.5 2a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3M9.05 3a2.5 2.5 0 0 1 4.9 0H16v1h-2.05a2.5 2.5 0 0 1-4.9 0H0V3zM4.5 7a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3M2.05 8a2.5 2.5 0 0 1 4.9 0H16v1H6.95a2.5 2.5 0 0 1-4.9 0H0V8zm7 4a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3m-2.45 1a2.5 2.5 0 0 1 4.9 0H16v1h-2.05a2.5 2.5 0 0 1-4.9 0H0v-1z"/></svg>
+            Edytuj Alokację
+        </a>
+        <button type="button" id="toggleAddAssetFormBtn" class="btn btn-sm btn-outline-success mr-2">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-plus-lg mr-1" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 2a.5.5 0 0 1 .5.5v5h5a.5.5 0 0 1 0 1h-5v5a.5.5 0 0 1-1 0v-5h-5a.5.5 0 0 1 0-1h5v-5A.5.5 0 0 1 8 2"/></svg>
+            Dodaj Aktywo
+        </button>
+        <!-- FORMULARZ DLA PRZYCISKU SNAPSHOT - UPEWNIJ SIĘ, ŻE JEST NIEZALEŻNY -->
+        <form method="POST" action="{{ url_for('main.add_portfolio_snapshot', portfolio_id=selected_portfolio.id) }}" style="display: inline-block;">
+            <button type="submit" class="btn btn-sm btn-outline-info">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-camera-fill mr-1" viewBox="0 0 16 16"><path d="M10.5 8.5a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0"/><path d="M2 4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-1.172a2 2 0 0 1-1.414-.586l-.828-.828A2 2 0 0 0 9.172 2H6.828a2 2 0 0 0-1.414.586l-.828.828A2 2 0 0 1 3.172 4H2zm.5 2a.5.5 0 1 1 0-1 .5.5 0 0 1 0 1m9-1a.5.5 0 1 1 0-1 .5.5 0 0 1 0 1"/></svg>
+                Snapshot
+            </button>
+        </form>
+    </div>
+    {% endif %}
+</div>
+{% else %}
+<p class="text-muted">Nie masz jeszcze żadnych portfeli. <a href="{{ url_for('main.add_portfolio') }}">Dodaj pierwszy!</a></p>
+{% endif %}
+
+
+{% if selected_portfolio %}
+<div class="card mb-4">
+    <div class="card-header">
+        <div class="d-flex justify-content-between align-items-center">
+            <h4 class="mb-0">{{ selected_portfolio.name }}</h4>
+            <span class="h5 mb-0"><strong class="text-primary">{{ "%.2f"|format(total_portfolio_value) }} PLN</strong></span>
+        </div>
+        {% if selected_portfolio.description %}<p class="mb-0 mt-1 text-muted"><small>{{ selected_portfolio.description }}</small></p>{% endif %}
+    </div>
+    <div class="card-body">
+        <div id="addAssetFormContainer" class="mb-4 pt-3 border-bottom" style="display: none;">
+            <h5>Dodaj aktywo</h5>
+            <form method="POST" action="{{ url_for('main.add_asset_to_portfolio', portfolio_id=selected_portfolio.id) }}">
+                <div class="form-row"><div class="form-group col-md-12"><label for="asset_name_form">Nazwa</label><input type="text" class="form-control form-control-sm" id="asset_name_form" name="asset_name" required></div></div>
+                <div class="form-row"><div class="form-group col-md-6"><label for="asset_category_id_form">Kategoria</label><select name="asset_category_id" id="asset_category_id_form" class="form-control form-control-sm" required><option value="">--Wybierz--</option>{% for cat in asset_categories %}<option value="{{cat.id}}">{{cat.name}}</option>{% endfor %}</select></div><div class="form-group col-md-6"><label for="current_value_form">Wartość</label><input type="number" step="0.01" class="form-control form-control-sm" id="current_value_form" name="current_value" required></div></div>
+                <div class="form-row"><div class="form-group col-md-4"><label for="quantity_form">Ilość</label><input type="number" step="any" class="form-control form-control-sm" id="quantity_form" name="quantity"></div><div class="form-group col-md-4"><label for="currency_form">Waluta</label><input type="text" class="form-control form-control-sm" id="currency_form" name="currency" value="PLN" required></div><div class="form-group col-md-4"><label for="ticker_form">Ticker</label><input type="text" class="form-control form-control-sm" id="ticker_form" name="ticker"></div></div>
+                <button type="submit" class="btn btn-primary btn-sm">Dodaj</button>
+                <button type="button" id="cancelAddAssetBtn" class="btn btn-outline-secondary btn-sm ml-2">Anuluj</button>
+            </form>
+            <hr class="my-3">
+        </div>
+        
+        <div class="row">
+            <div class="col-md-12">
+                <h5 class="mb-3">Aktywa</h5>
+                {% if assets %}<div class="table-responsive mb-3"><table class="table table-sm table-hover"><thead><tr><th>Nazwa</th><th>Kategoria</th><th class="text-right">Ilość</th><th class="text-right">Wartość</th><th>Waluta</th><th>Ticker</th><th class="text-center" style="width:100px;">Akcje</th></tr></thead><tbody>
+                {% for asset_item in assets %} 
+                <tr><td class="align-middle">{{asset_item.name}}</td><td class="align-middle">{% if asset_item.asset_category_ref %}<span class="badge badge-secondary" style="font-size:0.8em;">{{asset_item.asset_category_ref.name}}</span>{% else %}<span class="badge badge-warning" style="font-size:0.8em;">Brak</span>{% endif %}</td><td class="text-right align-middle">{{asset_item.quantity if asset_item.quantity is not none else '-'}}</td><td class="text-right font-weight-bold align-middle">{{"%.2f"|format(asset_item.current_value)}}</td><td class="align-middle">{{asset_item.currency}}</td><td class="align-middle">{{asset_item.ticker or '-'}}</td><td class="text-center align-middle"><a href="{{url_for('main.edit_asset',asset_id=asset_item.id)}}" class="btn btn-xs btn-outline-primary p-1 mx-1" title="Edytuj"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-pencil-square" viewBox="0 0 16 16"><path d="M15.502 1.94a.5.5 0 0 1 0 .706L14.459 3.69l-2-2L13.502.646a.5.5 0 0 1 .707 0l1.293 1.293zm-1.75 2.456-2-2L4.939 9.21a.5.5 0 0 0-.121.196l-.805 2.414a.25.25 0 0 0 .316.316l2.414-.805a.5.5 0 0 0 .196-.12l6.813-6.814z"/><path fill-rule="evenodd" d="M1 13.5A1.5 1.5 0 0 0 2.5 15h11a1.5 1.5 0 0 0 1.5-1.5v-6a.5.5 0 0 0-1 0v6a.5.5 0 0 1-.5.5h-11a.5.5 0 0 1-.5-.5v-11a.5.5 0 0 1 .5-.5H9a.5.5 0 0 0 0-1H2.5A1.5 1.5 0 0 0 1 2.5z"/></svg></a><form method="POST" action="{{url_for('main.delete_asset',asset_id=asset_item.id)}}" style="display:inline-block;" onsubmit="return confirm('Czy na pewno chcesz usunąć aktywo: {{asset_item.name|e}}?');"><button type="submit" class="btn btn-xs btn-outline-danger p-1 mx-1" title="Usuń"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-trash3-fill" viewBox="0 0 16 16"><path d="M11 1.5v1h3.5a.5.5 0 0 1 0 1h-.538l-.853 10.66A2 2 0 0 1 11.115 16h-6.23a2 2 0 0 1-1.994-1.84L2.038 3.5H1.5a.5.5 0 0 1 0-1H5v-1A1.5 1.5 0 0 1 6.5 0h3A1.5 1.5 0 0 1 11 1.5m-5 0v1h4v-1a.5.5 0 0 0-.5-.5h-3a.5.5 0 0 0-.5.5M4.5 5.029l.5 8.5a.5.5 0 1 0 .998-.06l-.5-8.5a.5.5 0 1 0-.998.06m6.53-.528a.5.5 0 0 0-.528.47l-.5 8.5a.5.5 0 0 0 .998.058l.5-8.5a.5.5 0 0 0-.47-.528M8 4.5a.5.5 0 0 0-.5.5v8.5a.5.5 0 0 0 1 0V5a.5.5 0 0 0-.5-.5"/></svg></button></form></td></tr>{% endfor %}</tbody></table></div>
+                {% else %}<p class="text-muted">Brak aktywów w tym portfelu.</p>{% endif %}
+            </div>
+        </div>
+
+        <div class="row mt-4">
+            <div class="col-md-6 mb-3 mb-md-0">
+                <div class="card h-100"><div class="card-header"><h5 class="mb-0">Realna alokacja</h5></div><div class="card-body">{% if portfolio_summary_data %}<div class="chart-container" style="height:280px;"><div id="portfolioCompositionDataContainer" data-chartdata='{{portfolio_summary_data|tojson|safe}}' style="height:100%;width:100%;"><canvas id="portfolioCompositionChart"></canvas></div></div>{% else %}<p class="text-muted text-center">Brak danych do rozkładu.</p>{% endif %}</div></div>
+            </div>
+            <div class="col-md-6">
+                <div class="card h-100"><div class="card-header"><h5 class="mb-0">Docelowa alokacja</h5></div><div class="card-body">{% if target_allocation_data %}<ul class="list-group list-group-flush">{% for cat_name,perc in target_allocation_data.items() %}<li class="list-group-item d-flex justify-content-between align-items-center p-2 pl-0 pr-0">{{cat_name}}<span class="badge badge-primary badge-pill" style="font-size:0.9em;">{{"%.1f"|format(perc)}}%</span></li>{% endfor %}</ul>{% else %}<p class="text-muted text-center">Nie zdefiniowano alokacji. <a href="{{url_for('main.edit_portfolio',portfolio_id=selected_portfolio.id)}}">Ustaw</a>.</p>{% endif %}</div></div>
+            </div>
+        </div>
+
+        <div class="row mt-4">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header"><h5 class="mb-0">Historia</h5></div>
+                    <div class="card-body">
+                        {% if portfolio_value_history_data.labels and portfolio_value_history_data.labels|length > 0 %}
+                        <div class="chart-container mb-3" style="height:300px;"><div id="portfolioValueHistoryContainer" data-chartdata='{{portfolio_value_history_data|tojson|safe}}' style="height:100%;width:100%;"><canvas id="portfolioValueHistoryChart"></canvas></div></div>
+                        <h6>Snapshoty</h6>
+                        <div class="table-responsive"><table class="table table-sm table-striped table-hover"><thead><tr><th>Data i Czas</th><th class="text-right">Wartość</th><th class="text-center" style="width:80px;">Akcja</th></tr></thead><tbody>
+                        {% for snapshot in portfolio_snapshots_list %}
+                        <tr><td class="small">{{snapshot.timestamp.strftime('%Y-%m-%d %H:%M:%S')}}</td><td class="text-right small">{{"%.2f"|format(snapshot.total_value)}}</td><td class="text-center"><form method="POST" action="{{url_for('main.delete_portfolio_snapshot',snapshot_id=snapshot.id)}}" style="display:inline-block;" onsubmit="return confirm('Usunąć ten snapshot?');"><button type="submit" class="btn btn-xs btn-outline-danger p-1" title="Usuń snapshot"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" class="bi bi-x-circle" viewBox="0 0 16 16"><path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14m0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16"/><path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708"/></svg></button></form></td></tr>{% endfor %}</tbody></table></div>
+                        {% else %}<p class="text-muted">Brak snapshotów. Kliknij "Snapshot" (obok wyboru portfela), aby dodać.</p>{% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div> 
+</div> 
+{% endif %} 
+
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+// Cały kod JavaScript z ostatniej działającej wersji
+// (createChart, obsługa Gemini, logika dla toggleAddAssetFormBtn i cancelAddAssetBtn)
+// Upewnij się, że jest tu wklejony poprawnie.
+document.addEventListener('DOMContentLoaded', function () {
+    const modernColors = ['rgba(75,192,192,0.85)','rgba(54,162,235,0.85)','rgba(255,159,64,0.85)','rgba(153,102,255,0.85)','rgba(255,99,132,0.85)','rgba(255,206,86,0.85)','rgba(76,175,80,0.85)','rgba(121,85,72,0.85)','rgba(158,158,158,0.85)','rgba(236,64,122,0.85)','rgba(33,150,243,0.85)','rgba(139,195,74,0.85)'];
+    function getBorderColors(bgColors){return bgColors.map(c=>{const p=c.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/);return p?`rgba(${Math.max(0,parseInt(p[1])-15)}, ${Math.max(0,parseInt(p[2])-15)}, ${Math.max(0,parseInt(p[3])-15)}, 1)`:c.replace(/[\d.]+\)$/,'1)')})}
+    function getConsistentColors(count){let cs=[];for(let i=0;i<count;i++){cs.push(modernColors[i%modernColors.length])}return cs}
+    function createChart(cId,cT,dCId,lT,cOO={}){const x=document.getElementById(cId),dC=document.getElementById(dCId);if(!x||!dC)return null;let rDS=dC.dataset.chartdata,rD;try{rD=rDS&&rDS.trim()!==""&&rDS.trim()!=="{}"?JSON.parse(rDS):{}}catch(e){console.error(`Error parsing JSON for ${dCId}:`,e,"Raw data string:",rDS);rD={}}
+    let iED=true;if(cT==='line'){iED=!rD.labels||rD.labels.length===0||(!rD.datasets&&((!rD.incomes||rD.incomes.length===0)&&(!rD.expenses||rD.expenses.length===0))&&(!rD.values||rD.values.length===0))}else{iED=Object.keys(rD).length===0}
+    if(iED){let eC=Chart.getChart(x);if(eC){eC.destroy()}return null}
+    let cLs,dSC,fCT=cT;const pDBgC=getConsistentColors(Object.keys(rD).length),pDBrC=getBorderColors(pDBgC);
+    if(cT==='line'&&rD.labels){cLs=rD.labels;if(rD.incomes&&rD.expenses){dSC=[{label:'Przychody (PLN)',data:rD.incomes||[],borderColor:'rgba(76,175,80,1)',backgroundColor:'rgba(76,175,80,0.3)',tension:0.3,fill:'start',pointRadius:4,pointHoverRadius:6,pointBackgroundColor:'rgba(76,175,80,1)'},{label:'Wydatki (PLN)',data:rD.expenses||[],borderColor:'rgba(239,83,80,1)',backgroundColor:'rgba(239,83,80,0.3)',tension:0.3,fill:'start',pointRadius:4,pointHoverRadius:6,pointBackgroundColor:'rgba(239,83,80,1)'}]}else if(rD.values){dSC=[{label:lT||'Wartość (PLN)',data:rD.values||[],borderColor:'rgba(54,162,235,1)',backgroundColor:'rgba(54,162,235,0.3)',tension:0.3,fill:'start',pointRadius:3,pointHoverRadius:5,pointBackgroundColor:'rgba(54,162,235,1)'}]}}
+    else if((cT==='pie'||cT==='doughnut')&&Object.keys(rD).length>0){cLs=Object.keys(rD);const dVs=Object.values(rD);dSC=[{label:lT||'Dane',data:dVs,backgroundColor:pDBgC,borderColor:pDBrC,borderWidth:2,hoverBorderColor:pDBrC.map(c=>c.replace('1)','0.7)')),hoverBorderWidth:2.5,hoverOffset:10}]}
+    else{cLs=Object.keys(rD);const dVs=Object.values(rD);const bBgC=getConsistentColors(cLs.length);dSC=[{label:lT||'Wydatki',data:dVs,backgroundColor:bBgC,borderColor:bBgC,borderWidth:1,borderRadius:6,borderSkipped:false}]}
+    let bCO={responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true,position:cT==='pie'||cT==='doughnut'?'bottom':'top',labels:{font:{family:'Poppins',size:12,weight:'500'},padding:cT==='pie'||cT==='doughnut'?25:10,boxWidth:18,usePointStyle:cT==='pie'||cT==='doughnut'},onHover:(e,lI,l)=>{const c=l.chart;if(c.getDatasetMeta(lI.datasetIndex)){c.getDatasetMeta(lI.datasetIndex).data[lI.index].hidden=false;c.update()}e.native.target.style.cursor='pointer'},onLeave:(e,lI,l)=>{e.native.target.style.cursor='default'}},tooltip:{enabled:true,backgroundColor:'rgba(30,30,30,0.85)',titleFont:{family:'Poppins',size:14,weight:'600'},bodyFont:{family:'Poppins',size:13},padding:15,cornerRadius:8,displayColors:cT==='pie'||cT==='doughnut',borderColor:'rgba(255,255,255,0.1)',borderWidth:1,boxPadding:4,callbacks:{label:function(c){let l='',v;if(cT==='pie'||cT==='doughnut'){l=c.label||'';v=c.parsed}else if(cT==='line'){l=c.dataset.label||'';v=c.parsed.y}else if(fCT==='bar'){l=c.label||'';v=c.chart.options.indexAxis==='y'?c.parsed.x:c.parsed.y}
+    if(l){l+=': '}if(v!==null&&v!==undefined){l+=new Intl.NumberFormat('pl-PL',{style:'currency',currency:'PLN'}).format(v)}if((cT==='pie'||cT==='doughnut')&&c.dataset.data){const t=c.dataset.data.reduce((s,v)=>s+v,0);const p=t>0?(v/t*100).toFixed(1)+'%':'0%';l+=` (${p})`}return l}}}},scales:{},layout:{padding:{top:5,right:15,bottom:5,left:15}}};
+    if(cT==='doughnut'){bCO.cutout='65%'}
+    if(fCT==='bar'){if(cOO.indexAxis==='y'||!cOO.indexAxis){bCO.indexAxis='y';bCO.scales={x:{beginAtZero:true,grid:{drawBorder:false,color:"rgba(0,0,0,0.08)"},ticks:{font:{family:'Poppins'},padding:10}},y:{grid:{display:false},ticks:{font:{family:'Poppins',size:11},padding:5}}}}else{bCO.indexAxis='x';bCO.scales={y:{beginAtZero:true,grid:{drawBorder:false,color:"rgba(0,0,0,0.08)"},ticks:{font:{family:'Poppins'},padding:10}},x:{grid:{display:false},ticks:{font:{family:'Poppins',size:11},padding:5}}}}}
+    else if(cT==='line'){bCO.scales={y:{beginAtZero:false,grid:{color:"rgba(0,0,0,0.08)",drawBorder:false},ticks:{font:{family:'Poppins'},padding:10}},x:{grid:{display:false},ticks:{font:{family:'Poppins'},padding:5 }}};bCO.interaction={mode:'index',intersect:false}; if(rD.values){bCO.plugins.legend.display=false}}
+    const fCO={...bCO,...cOO};try{let eC=Chart.getChart(x);if(eC){eC.destroy()}return new Chart(x,{type:fCT,data:{labels:cLs,datasets:dSC},options:fCO})}catch(cE){console.error(`Error creating chart ${cId}:`,cE);return null}}
+
+    if (document.getElementById('expensesByCategoryOverallDataContainer')) { createChart('expensesByCategoryOverallDataContainer', 'bar', 'expensesByCategoryOverallDataContainer', 'Wydatki', {indexAxis: 'y'}); }
+    if (document.getElementById('expensesTomekDataContainer')) { createChart('expensesTomekChart', 'doughnut', 'expensesTomekDataContainer', 'Wydatki {{ PERSON_TOMEK }}'); }
+    if (document.getElementById('expensesTockaDataContainer')) { createChart('expensesTockaChart', 'doughnut', 'expensesTockaDataContainer', 'Wydatki {{ PERSON_TOCKA }}'); }
+    const trendsDataContainerJS = document.getElementById('monthlyTrendsDataContainer');
+    if (trendsDataContainerJS) { const chartDataAttrJS = trendsDataContainerJS.dataset.chartdata; if (chartDataAttrJS && chartDataAttrJS.trim() !== "" && chartDataAttrJS !== "{}") { try { const trendsDataJS = JSON.parse(chartDataAttrJS); if (trendsDataJS && trendsDataJS.labels && trendsDataJS.labels.length > 0 && ( (trendsDataJS.incomes && trendsDataJS.incomes.length > 0) || (trendsDataJS.expenses && trendsDataJS.expenses.length > 0) ) ) { createChart('monthlyTrendsChart', 'line', 'monthlyTrendsDataContainer', null); } } catch(e) { /* console.error("Error in trends chart logic:", e); */ } } }
+    const portfolioCompositionContainer = document.getElementById('portfolioCompositionDataContainer');
+    if (portfolioCompositionContainer) { createChart('portfolioCompositionChart', 'doughnut', 'portfolioCompositionDataContainer', 'Rozkład Portfela'); }
+    const portfolioValueHistoryContainer = document.getElementById('portfolioValueHistoryContainer');
+    if (portfolioValueHistoryContainer) {
+        const historyChartDataAttr = portfolioValueHistoryContainer.dataset.chartdata;
+        if (historyChartDataAttr && historyChartDataAttr.trim() !== "" && historyChartDataAttr.trim() !== "{}") {
+            try {
+                const historyData = JSON.parse(historyChartDataAttr);
+                if (historyData && historyData.labels && historyData.labels.length > 0 && historyData.values && historyData.values.length > 0) {
+                    createChart('portfolioValueHistoryChart', 'line', 'portfolioValueHistoryContainer', 'Wartość Portfela');
+                }
+            } catch(e) { console.error("Error parsing or creating portfolio value history chart:", e); }
+        }
+    }
+    const generateGeminiBtnJS = document.getElementById('generateGeminiSummaryBtn');
+    const geminiSummaryContainerJS = document.getElementById('geminiSummaryContainer');
+    const geminiSummaryContentJS = document.getElementById('geminiSummaryContent');
+    if (generateGeminiBtnJS && geminiSummaryContainerJS && geminiSummaryContentJS) { /* ... kod Gemini ... */ }
+    
+    const toggleAddAssetFormBtn = document.getElementById('toggleAddAssetFormBtn');
+    const addAssetFormContainer = document.getElementById('addAssetFormContainer');
+    const cancelAddAssetBtn = document.getElementById('cancelAddAssetBtn');
+
+    if (toggleAddAssetFormBtn && addAssetFormContainer) {
+        toggleAddAssetFormBtn.addEventListener('click', function() {
+            const isHidden = addAssetFormContainer.style.display === 'none' || addAssetFormContainer.style.display === '';
+            addAssetFormContainer.style.display = isHidden ? 'block' : 'none';
+            this.innerHTML = isHidden ? 
+                '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-dash-lg mr-1" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M2 8a.5.5 0 0 1 .5-.5h11a.5.5 0 0 1 0 1h-11A.5.5 0 0 1 2 8"/></svg> Ukryj Formularz' :
+                '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-plus-lg mr-1" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 2a.5.5 0 0 1 .5.5v5h5a.5.5 0 0 1 0 1h-5v5a.5.5 0 0 1-1 0v-5h-5a.5.5 0 0 1 0-1h5v-5A.5.5 0 0 1 8 2"/></svg> Dodaj Aktywo';
+            if (isHidden) {
+                const firstInput = addAssetFormContainer.querySelector('input[name="asset_name"], select[name="asset_category_id"]');
+                if (firstInput) firstInput.focus();
+            }
+        });
+    }
+    if (cancelAddAssetBtn && addAssetFormContainer && toggleAddAssetFormBtn) {
+        cancelAddAssetBtn.addEventListener('click', function() {
+            addAssetFormContainer.style.display = 'none';
+            toggleAddAssetFormBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-plus-lg mr-1" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 2a.5.5 0 0 1 .5.5v5h5a.5.5 0 0 1 0 1h-5v5a.5.5 0 0 1-1 0v-5h-5a.5.5 0 0 1 0-1h5v-5A.5.5 0 0 1 8 2"/></svg> Dodaj Aktywo';
+            addAssetFormContainer.querySelector('form').reset();
+        });
+    }
+});
+</script>
+{% endblock %}

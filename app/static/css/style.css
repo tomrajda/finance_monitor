@@ -1,0 +1,247 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
+
+:root {
+    --primary-color: #007bff;
+    --primary-color-darker: #0056b3;
+    --secondary-color: #6c757d;
+    --light-bg: #f8f9fa;
+    --light-gray: #e9ecef;
+    --dark-text: #343a40;
+    --light-text: #ffffff;
+    --success-color: #28a745;
+    --danger-color: #dc3545;
+    --info-color: #17a2b8;
+    --warning-color: #ffc107;
+    --card-bg: #ffffff;
+    --card-border-color: #dee2e6;
+    --border-radius: 0.3rem;
+    --box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.075);
+    --box-shadow-light: 0 0.25rem 0.5rem rgba(0,0,0,0.05);
+}
+
+body {
+    font-family: 'Poppins', sans-serif;
+    background-color: var(--light-bg);
+    color: var(--dark-text);
+    line-height: 1.6;
+    font-size: 16px;
+}
+
+.container {
+    max-width: 1140px;
+}
+
+/* --- Navbar --- */
+.navbar {
+    background-color: var(--card-bg) !important;
+    box-shadow: var(--box-shadow-light);
+    padding-top: 0.8rem;
+    padding-bottom: 0.8rem;
+}
+
+.navbar-brand {
+    font-weight: 600;
+    color: var(--primary-color) !important;
+    font-size: 1.5rem;
+}
+
+.navbar-nav .nav-link {
+    color: var(--secondary-color) !important;
+    font-weight: 500;
+    padding: 0.5rem 1rem;
+    transition: color 0.2s ease-in-out;
+}
+
+.navbar-nav .nav-link:hover,
+.navbar-nav .nav-link.active {
+    color: var(--primary-color) !important;
+}
+
+/* --- Alerts --- */
+.alert {
+    border-radius: var(--border-radius);
+    box-shadow: var(--box-shadow-light);
+    font-size: 0.95rem;
+}
+.alert-primary { background-color: var(--primary-color); color: var(--light-text); border-color: var(--primary-color-darker); }
+.alert-success { background-color: var(--success-color); color: var(--light-text); }
+.alert-danger { background-color: var(--danger-color); color: var(--light-text); }
+.alert-warning { background-color: var(--warning-color); color: var(--dark-text); }
+.alert-info { background-color: var(--info-color); color: var(--light-text); }
+
+
+/* --- Cards --- */
+.card {
+    border: none;
+    border-radius: var(--border-radius);
+    box-shadow: var(--box-shadow);
+    margin-bottom: 1.5rem;
+    background-color: var(--card-bg);
+}
+
+.card-header {
+    background-color: transparent;
+    border-bottom: 1px solid var(--light-gray);
+    font-weight: 600;
+    padding: 0.75rem 1.25rem;
+    font-size: 1.1rem;
+}
+.card-title {
+    font-weight: 600;
+}
+
+.card.bg-success .card-header, .card.bg-success .card-title,
+.card.bg-danger .card-header, .card.bg-danger .card-title,
+.card.bg-info .card-header, .card.bg-info .card-title,
+.card.bg-warning .card-header, .card.bg-warning .card-title {
+    color: var(--light-text) !important;
+}
+.card.bg-warning .card-header, .card.bg-warning .card-title {
+    color: var(--dark-text) !important;
+}
+
+
+/* --- Forms --- */
+.form-control {
+    border-radius: var(--border-radius);
+    border: 1px solid var(--light-gray);
+    padding: 0.5rem 0.75rem;
+    transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+    height: auto; 
+    line-height: 1.5;
+}
+
+.form-control:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+.form-control-sm {
+    padding: 0.35rem 0.6rem; 
+    font-size: 0.875rem;
+    line-height: 1.5; 
+    height: calc(1.5em + 0.75rem + 2px); /* To powinno dać wystarczającą wysokość */
+}
+
+/* Opcjonalne, jeśli powyższe nie zadziała idealnie dla konkretnych selectów */
+/* #month_select, #year_select { */
+    /* Można tu dodać dodatkowe, specyficzne style, np. */
+    /* padding-top: 0.5rem !important; */
+    /* padding-bottom: 0.5rem !important; */
+    /* height: 38px !important; */ /* Konkretna wysokość */
+/* } */
+
+
+.form-group label {
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+}
+
+/* --- Buttons --- */
+.btn {
+    border-radius: var(--border-radius);
+    font-weight: 500;
+    padding: 0.5rem 1rem;
+    transition: all 0.2s ease-in-out;
+    letter-spacing: 0.5px;
+}
+.btn-primary { background-color: var(--primary-color); border-color: var(--primary-color); }
+.btn-primary:hover { background-color: var(--primary-color-darker); border-color: var(--primary-color-darker); }
+.btn-outline-primary { /* Dodane dla przycisku Gemini */
+    color: var(--primary-color);
+    border-color: var(--primary-color);
+}
+.btn-outline-primary:hover {
+    background-color: var(--primary-color);
+    color: var(--light-text);
+}
+.btn-outline-info { /* Dodane dla przycisku pomocy AI w formularzu */
+    color: var(--info-color);
+    border-color: var(--info-color);
+}
+.btn-outline-info:hover {
+    background-color: var(--info-color);
+    color: var(--light-text);
+}
+.btn-rounded { /* Dla przycisku Gemini */
+    border-radius: 50px; /* Bardziej zaokrąglone rogi */
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+}
+.btn-sm { padding: 0.25rem 0.5rem; font-size: 0.875rem; }
+
+/* --- Tables --- */
+.table {
+    background-color: var(--card-bg);
+    box-shadow: var(--box-shadow-light);
+    border-radius: var(--border-radius);
+    overflow: hidden;
+}
+.table thead th {
+    background-color: var(--light-bg);
+    border-bottom: 2px solid var(--card-border-color);
+    font-weight: 600;
+    color: var(--dark-text);
+}
+.table-striped tbody tr:nth-of-type(odd) { background-color: rgba(0,0,0,.02); }
+.table td, .table th { vertical-align: middle; }
+ 
+.badge-success { background-color: var(--success-color); }
+.badge-danger { background-color: var(--danger-color); }
+
+
+/* --- Wykresy --- */
+.chart-container {
+    padding: 1rem;
+    background-color: var(--card-bg); /* Już zdefiniowane w .card, ale dla pewności */
+    border-radius: var(--border-radius); /* Już zdefiniowane w .card */
+    /* box-shadow: var(--box-shadow-light); */ /* Już zdefiniowane w .card */
+    margin-bottom: 1rem; /* Jeśli jest częścią .card, to .card ma już margin-bottom */
+    height: 350px; 
+    position: relative; 
+}
+.chart-container canvas { /* Upewnijmy się, że canvas wypełnia kontener */
+    width: 100% !important;
+    height: 100% !important;
+}
+
+
+/* --- Gemini Summary --- */
+.gemini-summary {
+    white-space: pre-wrap;
+    background-color: #e9f5ff; 
+    padding: 1.25rem;
+    border-radius: var(--border-radius);
+    border: 1px solid #b8d6eb;
+    font-size: 0.95rem;
+    /* margin-top: 1rem; */ /* Usunięte, bo jest w card-body */
+}
+.gemini-summary p:first-child { margin-top: 0; }
+.gemini-summary p:last-child { margin-bottom: 0; }
+
+
+/* --- AI Suggestion Box w formularzu transakcji --- */
+.ai-suggestion-container {
+    margin-top: 10px;
+    padding: 15px; /* Trochę więcej paddingu */
+    background-color: #f0f8ff; /* AliceBlue, bardzo jasny */
+    border: 1px solid #d6e9f8;
+    border-radius: var(--border-radius);
+    font-size: 0.9em;
+}
+.ai-suggestion-container p { margin-bottom: 8px; }
+.ai-suggestion-container .btn { margin-right: 5px; margin-top: 5px;}
+
+
+/* Nagłówki */
+h2, h3, h4, h5 {
+    color: var(--dark-text);
+    font-weight: 600;
+    margin-bottom: 1rem;
+}
+h2 { font-size: 1.8rem; margin-top: 1.5rem; }
+h3 { font-size: 1.5rem; }
+h4 { font-size: 1.25rem; }
+
+.mb-4 { margin-bottom: 2rem !important; }
+.mt-4 { margin-top: 2rem !important; }

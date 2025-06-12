@@ -1,0 +1,8 @@
+Flask
+Flask-SQLAlchemy
+SQLAlchemy
+python-dotenv
+google-generativeai
+Flask-WTF # Opcjonalnie, dla lepszych formularzy
+Flask-Moment
+pytz
