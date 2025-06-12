@@ -36,7 +36,6 @@ def index():
     selected_month_for_details = request.args.get('month', default=default_month_for_details, type=int)
 
     # --- DANE DLA WYBRANEGO MIESIĄCA (szczegółowy widok) ---
-    # ... (Ta część pozostaje taka sama jak w poprzedniej odpowiedzi - obliczenia dla _selected_month) ...
     income_tomek = db.session.query(func.sum(Transaction.amount)).filter(Transaction.is_income == True, Transaction.person == PERSON_TOMEK, extract('year', Transaction.date) == selected_year_for_details, extract('month', Transaction.date) == selected_month_for_details).scalar() or 0.0
     income_tocka = db.session.query(func.sum(Transaction.amount)).filter(Transaction.is_income == True, Transaction.person == PERSON_TOCKA, extract('year', Transaction.date) == selected_year_for_details, extract('month', Transaction.date) == selected_month_for_details).scalar() or 0.0
     total_income_selected_month = income_tomek + income_tocka
@@ -71,68 +70,76 @@ def index():
         if amount_shared_cat_tocka > 0: expenses_tocka_by_category_dict[f"{cat.name} (udział)"] = expenses_tocka_by_category_dict.get(f"{cat.name} (udział)", 0) + (amount_shared_cat_tocka / 2)
     transactions_selected_month = Transaction.query.filter(extract('year', Transaction.date) == selected_year_for_details, extract('month', Transaction.date) == selected_month_for_details).order_by(Transaction.date.desc()).all()
 
-
-    # Lata i miesiące do wyboru w dropdownie
     years_for_dropdown_query = db.session.query(extract('year', Transaction.date)).distinct().all()
     years_for_dropdown = sorted(list(set(r[0] for r in years_for_dropdown_query if r[0] is not None)))
     if not years_for_dropdown: years_for_dropdown = [today.year]
     if today.year not in years_for_dropdown: years_for_dropdown.append(today.year)
     if default_year_for_details not in years_for_dropdown: years_for_dropdown.append(default_year_for_details)
     years_for_dropdown = sorted(list(set(years_for_dropdown)))
-
-    months_list_for_dropdown = [
-        (1, "Styczeń"), (2, "Luty"), (3, "Marzec"), (4, "Kwiecień"),
-        (5, "Maj"), (6, "Czerwiec"), (7, "Lipiec"), (8, "Sierpień"),
-        (9, "Wrzesień"), (10, "Październik"), (11, "Listopad"), (12, "Grudzień")
-    ]
+    months_list_for_dropdown = [(1, "Styczeń"), (2, "Luty"), (3, "Marzec"), (4, "Kwiecień"), (5, "Maj"), (6, "Czerwiec"), (7, "Lipiec"), (8, "Sierpień"), (9, "Wrzesień"), (10, "Październik"), (11, "Listopad"), (12, "Grudzień")]
     current_month_name_for_details = dict(months_list_for_dropdown).get(selected_month_for_details, "Nieznany Miesiąc")
 
-    # --- DANE ROCZNE DO WYBRANEGO MIESIĄCA (YTD do selected_month_for_details) ---
-    year_for_ytd_calculations = selected_year_for_details # Używamy roku wybranego w filtrze
+    # --- DANE ROCZNE DO DNIA (YTD) - OD POCZĄTKU BIEŻĄCEGO ROKU DO KOŃCA WYBRANEGO MIESIĄCA ---
+    year_for_ytd_calculations = today.year # YTD jest zawsze dla bieżącego roku
 
-    # Przychody T&M łącznie od początku roku do końca wybranego miesiąca
+    # Przychody T&M łącznie od początku bieżącego roku DO KOŃCA MIESIĄCA WYBRANEGO W FILTRZE,
+    # ale tylko jeśli wybrany rok w filtrze jest taki sam jak bieżący rok.
+    # Jeśli wybrany rok jest przeszły, YTD liczymy do grudnia tego przeszłego roku.
+    
+    # Rok, do którego liczymy YTD (zawsze bieżący rok, chyba że filtr pokazuje rok przeszły)
+    actual_year_for_ytd = today.year 
+    # Miesiąc, do którego liczymy YTD
+    # Jeśli wybrany rok w filtrze to bieżący rok, to liczymy YTD do wybranego miesiąca
+    # Jeśli wybrany rok w filtrze to rok przeszły, to YTD dla tego przeszłego roku liczymy do grudnia
+    actual_month_for_ytd_end = selected_month_for_details if selected_year_for_details == today.year else 12
+    
+    # Etykieta YTD będzie zawsze odnosić się do roku, dla którego dane YTD są faktycznie liczone.
+    # Jeśli wybrany rok jest rokiem przeszłym, YTD będzie za cały ten przeszły rok.
+    # Jeśli wybrany rok jest rokiem bieżącym, YTD będzie do wybranego miesiąca tego bieżącego roku.
+    ytd_label_year = selected_year_for_details # Rok, który pokazujemy w etykiecie YTD
+
     total_income_ytd_couple = db.session.query(func.sum(Transaction.amount)).filter(
         Transaction.is_income == True,
-        extract('year', Transaction.date) == year_for_ytd_calculations,
-        extract('month', Transaction.date) <= selected_month_for_details # Do końca wybranego miesiąca
+        extract('year', Transaction.date) == ytd_label_year, # Używamy roku z dropdownu
+        extract('month', Transaction.date) <= (selected_month_for_details if ytd_label_year == today.year else 12) # Do wybranego miesiąca jeśli bieżący rok, inaczej do grudnia
     ).scalar() or 0.0
 
-    # Wydatki surowe T&M łącznie od początku roku do końca wybranego miesiąca
     total_expenses_raw_ytd_couple = db.session.query(func.sum(Transaction.amount)).filter(
         Transaction.is_income == False,
-        extract('year', Transaction.date) == year_for_ytd_calculations,
-        extract('month', Transaction.date) <= selected_month_for_details # Do końca wybranego miesiąca
+        extract('year', Transaction.date) == ytd_label_year,
+        extract('month', Transaction.date) <= (selected_month_for_details if ytd_label_year == today.year else 12)
     ).scalar() or 0.0
     
     savings_ytd_total_couple = total_income_ytd_couple - total_expenses_raw_ytd_couple
 
-    # Średnie miesięczne wydatki YTD (dzielimy przez numer wybranego miesiąca)
-    average_monthly_expenses_ytd_couple = total_expenses_raw_ytd_couple / selected_month_for_details if selected_month_for_details > 0 else 0
+    # Średnie miesięczne wydatki YTD (dzielimy przez numer miesiąca, do którego liczymy YTD)
+    months_for_avg_ytd = selected_month_for_details if ytd_label_year == today.year else 12
+    average_monthly_expenses_ytd_couple = total_expenses_raw_ytd_couple / months_for_avg_ytd if months_for_avg_ytd > 0 else 0
 
-    # Indywidualne YTD (do końca wybranego miesiąca)
+    # Indywidualne YTD
     income_ytd_tomek = db.session.query(func.sum(Transaction.amount)).filter(
         Transaction.is_income == True, Transaction.person == PERSON_TOMEK,
-        extract('year', Transaction.date) == year_for_ytd_calculations,
-        extract('month', Transaction.date) <= selected_month_for_details
+        extract('year', Transaction.date) == ytd_label_year,
+        extract('month', Transaction.date) <= (selected_month_for_details if ytd_label_year == today.year else 12)
     ).scalar() or 0.0
     income_ytd_tocka = db.session.query(func.sum(Transaction.amount)).filter(
         Transaction.is_income == True, Transaction.person == PERSON_TOCKA,
-        extract('year', Transaction.date) == year_for_ytd_calculations,
-        extract('month', Transaction.date) <= selected_month_for_details
+        extract('year', Transaction.date) == ytd_label_year,
+        extract('month', Transaction.date) <= (selected_month_for_details if ytd_label_year == today.year else 12)
     ).scalar() or 0.0
 
     shared_expenses_total_ytd = db.session.query(func.sum(Transaction.amount)).filter(
         Transaction.is_income == False,
-        extract('year', Transaction.date) == year_for_ytd_calculations,
-        extract('month', Transaction.date) <= selected_month_for_details,
-        Transaction.category_id.in_(shared_category_ids)
+        extract('year', Transaction.date) == ytd_label_year,
+        extract('month', Transaction.date) <= (selected_month_for_details if ytd_label_year == today.year else 12),
+        Transaction.category_id.in_(shared_category_ids) # Używamy wcześniej zdefiniowanych shared_category_ids
     ).scalar() or 0.0
     individual_share_of_shared_expenses_ytd = shared_expenses_total_ytd / 2
 
     private_expenses_ytd_tomek = db.session.query(func.sum(Transaction.amount)).filter(
         Transaction.is_income == False, Transaction.person == PERSON_TOMEK,
-        extract('year', Transaction.date) == year_for_ytd_calculations,
-        extract('month', Transaction.date) <= selected_month_for_details,
+        extract('year', Transaction.date) == ytd_label_year,
+        extract('month', Transaction.date) <= (selected_month_for_details if ytd_label_year == today.year else 12),
         Transaction.category_id.notin_(shared_category_ids)
     ).scalar() or 0.0
     total_expenses_ytd_tomek = private_expenses_ytd_tomek + individual_share_of_shared_expenses_ytd
@@ -140,33 +147,53 @@ def index():
 
     private_expenses_ytd_tocka = db.session.query(func.sum(Transaction.amount)).filter(
         Transaction.is_income == False, Transaction.person == PERSON_TOCKA,
-        extract('year', Transaction.date) == year_for_ytd_calculations,
-        extract('month', Transaction.date) <= selected_month_for_details,
+        extract('year', Transaction.date) == ytd_label_year,
+        extract('month', Transaction.date) <= (selected_month_for_details if ytd_label_year == today.year else 12),
         Transaction.category_id.notin_(shared_category_ids)
     ).scalar() or 0.0
     total_expenses_ytd_tocka = private_expenses_ytd_tocka + individual_share_of_shared_expenses_ytd
     savings_ytd_tocka = income_ytd_tocka - total_expenses_ytd_tocka
-    # --- KONIEC SEKCJI DANYCH ROCZNYCH (YTD do selected_month_for_details) ---
-
+    # --- KONIEC SEKCJI DANYCH ROCZNYCH (YTD) ---
 
     # --- DANE DLA WYKRESU TRENDÓW MIESIĘCZNYCH ---
     monthly_trends_data = {"labels": [], "incomes": [], "expenses": []}
-    # ... (logika dla monthly_trends_data - BEZ ZMIAN) ...
-    num_months_trend = 6 
     polskie_miesiace_abbr = ["", "Sty", "Lut", "Mar", "Kwi", "Maj", "Cze", "Lip", "Sie", "Wrz", "Paź", "Lis", "Gru"]
-    end_date_for_trend_loop = today.replace(day=1) - timedelta(days=1) 
-    for i in range(num_months_trend - 1, -1, -1): 
-        year_to_query_trend = end_date_for_trend_loop.year
-        month_to_query_trend = end_date_for_trend_loop.month - i
-        while month_to_query_trend <= 0:
-            month_to_query_trend += 12
-            year_to_query_trend -= 1
-        month_label = polskie_miesiace_abbr[month_to_query_trend]
-        monthly_trends_data["labels"].append(f"{month_label} '{str(year_to_query_trend)[-2:]}")
-        month_income_trend = db.session.query(func.sum(Transaction.amount)).filter(Transaction.is_income == True, extract('year', Transaction.date) == year_to_query_trend, extract('month', Transaction.date) == month_to_query_trend).scalar() or 0.0
+
+    year_for_trends_chart = selected_year_for_details # Rok dla trendów to ROK WYBRANY W DROPDOWNIE
+
+    last_month_for_trends_display = 0
+    if year_for_trends_chart == today.year:
+        last_month_for_trends_display = today.month -1 
+        if last_month_for_trends_display == 0 : # Jeśli jest styczeń, a pokazujemy poprzedni miesiąc
+            # W tym przypadku, jeśli chcemy pokazać coś sensownego dla "bieżącego roku",
+            # a jest styczeń, to nie ma poprzedniego miesiąca *w tym roku*.
+            # Można by pokazać grudzień poprzedniego roku, ale to komplikuje logikę "tylko wybrany rok".
+            # Na razie, jeśli jest styczeń i wybrano bieżący rok, wykres trendów będzie pusty.
+             last_month_for_trends_display = 0 # Sprawi, że pętla nie wykona się
+    elif year_for_trends_chart < today.year: # Wybrany rok jest rokiem przeszłym
+        last_month_for_trends_display = 12 # Pokaż wszystkie 12 miesięcy
+    else: # Wybrany rok jest rokiem przyszłym (teoretycznie nie powinno się zdarzyć z dropdownu)
+        last_month_for_trends_display = 0
+
+
+    for month_num in range(1, last_month_for_trends_display + 1):
+        month_label = polskie_miesiace_abbr[month_num]
+        monthly_trends_data["labels"].append(f"{month_label} '{str(year_for_trends_chart)[-2:]}")
+
+        month_income_trend = db.session.query(func.sum(Transaction.amount)).filter(
+            Transaction.is_income == True,
+            extract('year', Transaction.date) == year_for_trends_chart,
+            extract('month', Transaction.date) == month_num
+        ).scalar() or 0.0
         monthly_trends_data["incomes"].append(month_income_trend)
-        month_expense_trend = db.session.query(func.sum(Transaction.amount)).filter(Transaction.is_income == False, extract('year', Transaction.date) == year_to_query_trend, extract('month', Transaction.date) == month_to_query_trend).scalar() or 0.0
+
+        month_expense_trend = db.session.query(func.sum(Transaction.amount)).filter(
+            Transaction.is_income == False,
+            extract('year', Transaction.date) == year_for_trends_chart,
+            extract('month', Transaction.date) == month_num
+        ).scalar() or 0.0
         monthly_trends_data["expenses"].append(month_expense_trend)
+    # --- KONIEC DANYCH DLA WYKRESU TRENDÓW MIESIĘCZNYCH ---
 
     return render_template('index.html',
                            transactions=transactions_selected_month,
@@ -183,19 +210,16 @@ def index():
                            savings_tocka=savings_tocka_selected_month,
                            total_expenses_raw=total_expenses_raw_selected_month,
                            savings_total_month=savings_total_selected_month,
-                           # Dane YTD (do wybranego miesiąca)
-                           year_to_date_label=year_for_ytd_calculations, # Zmieniono nazwę dla jasności
+                           year_to_date_label=ytd_label_year, # Używamy roku, dla którego liczono YTD
                            total_income_ytd_couple=total_income_ytd_couple,
                            total_expenses_raw_ytd_couple=total_expenses_raw_ytd_couple,
                            savings_ytd_total_couple=savings_ytd_total_couple,
                            average_monthly_expenses_ytd_couple=average_monthly_expenses_ytd_couple,
                            savings_ytd_tomek=savings_ytd_tomek,
                            savings_ytd_tocka=savings_ytd_tocka,
-                           # Wykresy kategorii
                            expenses_by_category_overall_dict=expenses_by_category_overall_dict,
                            expenses_tomek_by_category_dict=expenses_tomek_by_category_dict,
                            expenses_tocka_by_category_dict=expenses_tocka_by_category_dict,
-                           # Filtry i inne
                            selected_year=selected_year_for_details,
                            selected_month=selected_month_for_details,
                            years=years_for_dropdown,
