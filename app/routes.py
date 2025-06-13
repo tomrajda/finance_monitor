@@ -24,10 +24,33 @@ ACCOUNT_NAME_WSPOLNE = "Wspólne Revolut"
 
 POLAND_TZ = pytz.timezone('Europe/Warsaw')
 
+# Zaktualizowana, bardziej zróżnicowana paleta kolorów
+CATEGORY_COLORS_PALETTE = [
+    'rgba(255, 99, 132, 0.85)',  # Różowy/Czerwony
+    'rgba(54, 162, 235, 0.85)',  # Niebieski
+    'rgba(255, 206, 86, 0.85)',  # Żółty
+    'rgba(75, 192, 192, 0.85)',  # Turkusowy/Teal
+    'rgba(153, 102, 255, 0.85)', # Fioletowy
+    'rgba(255, 159, 64, 0.85)',  # Pomarańczowy
+    'rgba(76, 175, 80, 0.85)',   # Zielony
+    'rgba(201, 203, 207, 0.85)', # Szary
+    'rgba(230, 126, 34, 0.85)',  # Ciemny Pomarańczowy (Carrot)
+    'rgba(46, 204, 113, 0.85)',  # Szmaragdowy
+    'rgba(142, 68, 173, 0.85)',  # Ciemny Fiolet (Wisteria)
+    'rgba(241, 196, 15, 0.85)',  # Słonecznikowy Żółty
+    'rgba(26, 188, 156, 0.85)',  # Turkusowy
+    'rgba(231, 76, 60, 0.85)',   # Ciemny Czerwony (Alizarin)
+    'rgba(52, 73, 94, 0.85)',    # Ciemny Niebiesko-Szary (Wet Asphalt)
+    'rgba(127, 140, 141, 0.85)', # Szary (Asbestos)
+    'rgba(0, 184, 148, 0.85)',   # Mint
+    'rgba(253, 203, 110, 0.85)', # Orange Yellow
+    'rgba(9, 132, 227, 0.85)',   # Peter River Blue
+    'rgba(211, 84, 0, 0.85)'     # Pumpkin
+]
+
 @main_bp.route('/', methods=['GET'])
 def index():
     today = date.today()
-    # Domyślny widok to poprzedni zakończony miesiąc
     last_day_of_prev_month = today.replace(day=1) - timedelta(days=1)
     default_year_for_details = last_day_of_prev_month.year
     default_month_for_details = last_day_of_prev_month.month
@@ -35,7 +58,6 @@ def index():
     selected_year_for_details = request.args.get('year', default=default_year_for_details, type=int)
     selected_month_for_details = request.args.get('month', default=default_month_for_details, type=int)
 
-    # --- DANE DLA WYBRANEGO MIESIĄCA (szczegółowy widok) ---
     income_tomek = db.session.query(func.sum(Transaction.amount)).filter(Transaction.is_income == True, Transaction.person == PERSON_TOMEK, extract('year', Transaction.date) == selected_year_for_details, extract('month', Transaction.date) == selected_month_for_details).scalar() or 0.0
     income_tocka = db.session.query(func.sum(Transaction.amount)).filter(Transaction.is_income == True, Transaction.person == PERSON_TOCKA, extract('year', Transaction.date) == selected_year_for_details, extract('month', Transaction.date) == selected_month_for_details).scalar() or 0.0
     total_income_selected_month = income_tomek + income_tocka
@@ -69,131 +91,60 @@ def index():
         amount_shared_cat_tocka = all_expenses_query_selected_month.filter(Transaction.category_id == cat.id).with_entities(func.sum(Transaction.amount)).scalar() or 0.0
         if amount_shared_cat_tocka > 0: expenses_tocka_by_category_dict[f"{cat.name} (udział)"] = expenses_tocka_by_category_dict.get(f"{cat.name} (udział)", 0) + (amount_shared_cat_tocka / 2)
     transactions_selected_month = Transaction.query.filter(extract('year', Transaction.date) == selected_year_for_details, extract('month', Transaction.date) == selected_month_for_details).order_by(Transaction.date.desc()).all()
-
     years_for_dropdown_query = db.session.query(extract('year', Transaction.date)).distinct().all()
     years_for_dropdown = sorted(list(set(r[0] for r in years_for_dropdown_query if r[0] is not None)))
     if not years_for_dropdown: years_for_dropdown = [today.year]
     if today.year not in years_for_dropdown: years_for_dropdown.append(today.year)
     if default_year_for_details not in years_for_dropdown: years_for_dropdown.append(default_year_for_details)
     years_for_dropdown = sorted(list(set(years_for_dropdown)))
-    months_list_for_dropdown = [(1, "Styczeń"), (2, "Luty"), (3, "Marzec"), (4, "Kwiecień"), (5, "Maj"), (6, "Czerwiec"), (7, "Lipiec"), (8, "Sierpień"), (9, "Wrzesień"), (10, "Październik"), (11, "Listopad"), (12, "Grudzień")]
-    current_month_name_for_details = dict(months_list_for_dropdown).get(selected_month_for_details, "Nieznany Miesiąc")
-
-    # --- DANE ROCZNE DO DNIA (YTD) - OD POCZĄTKU BIEŻĄCEGO ROKU DO KOŃCA WYBRANEGO MIESIĄCA ---
-    year_for_ytd_calculations = today.year # YTD jest zawsze dla bieżącego roku
-
-    # Przychody T&M łącznie od początku bieżącego roku DO KOŃCA MIESIĄCA WYBRANEGO W FILTRZE,
-    # ale tylko jeśli wybrany rok w filtrze jest taki sam jak bieżący rok.
-    # Jeśli wybrany rok jest przeszły, YTD liczymy do grudnia tego przeszłego roku.
+    months_list_for_dropdown = [(1, "styczeń"), (2, "luty"), (3, "marzec"), (4, "kwiecień"), (5, "maj"), (6, "czerwiec"), (7, "lipiec"), (8, "sierpień"), (9, "wrzesień"), (10, "październik"), (11, "listopad"), (12, "grudzień")]
+    current_month_name_for_details = dict(months_list_for_dropdown).get(selected_month_for_details, "nieznany miesiąc")
     
-    # Rok, do którego liczymy YTD (zawsze bieżący rok, chyba że filtr pokazuje rok przeszły)
-    actual_year_for_ytd = today.year 
-    # Miesiąc, do którego liczymy YTD
-    # Jeśli wybrany rok w filtrze to bieżący rok, to liczymy YTD do wybranego miesiąca
-    # Jeśli wybrany rok w filtrze to rok przeszły, to YTD dla tego przeszłego roku liczymy do grudnia
-    actual_month_for_ytd_end = selected_month_for_details if selected_year_for_details == today.year else 12
-    
-    # Etykieta YTD będzie zawsze odnosić się do roku, dla którego dane YTD są faktycznie liczone.
-    # Jeśli wybrany rok jest rokiem przeszłym, YTD będzie za cały ten przeszły rok.
-    # Jeśli wybrany rok jest rokiem bieżącym, YTD będzie do wybranego miesiąca tego bieżącego roku.
-    ytd_label_year = selected_year_for_details # Rok, który pokazujemy w etykiecie YTD
-
-    total_income_ytd_couple = db.session.query(func.sum(Transaction.amount)).filter(
-        Transaction.is_income == True,
-        extract('year', Transaction.date) == ytd_label_year, # Używamy roku z dropdownu
-        extract('month', Transaction.date) <= (selected_month_for_details if ytd_label_year == today.year else 12) # Do wybranego miesiąca jeśli bieżący rok, inaczej do grudnia
-    ).scalar() or 0.0
-
-    total_expenses_raw_ytd_couple = db.session.query(func.sum(Transaction.amount)).filter(
-        Transaction.is_income == False,
-        extract('year', Transaction.date) == ytd_label_year,
-        extract('month', Transaction.date) <= (selected_month_for_details if ytd_label_year == today.year else 12)
-    ).scalar() or 0.0
-    
+    ytd_label_year = selected_year_for_details
+    total_income_ytd_couple = db.session.query(func.sum(Transaction.amount)).filter(Transaction.is_income == True, extract('year', Transaction.date) == ytd_label_year, extract('month', Transaction.date) <= (selected_month_for_details if ytd_label_year == today.year else 12)).scalar() or 0.0
+    total_expenses_raw_ytd_couple = db.session.query(func.sum(Transaction.amount)).filter(Transaction.is_income == False, extract('year', Transaction.date) == ytd_label_year, extract('month', Transaction.date) <= (selected_month_for_details if ytd_label_year == today.year else 12)).scalar() or 0.0
     savings_ytd_total_couple = total_income_ytd_couple - total_expenses_raw_ytd_couple
-
-    # Średnie miesięczne wydatki YTD (dzielimy przez numer miesiąca, do którego liczymy YTD)
     months_for_avg_ytd = selected_month_for_details if ytd_label_year == today.year else 12
     average_monthly_expenses_ytd_couple = total_expenses_raw_ytd_couple / months_for_avg_ytd if months_for_avg_ytd > 0 else 0
-
-    # Indywidualne YTD
-    income_ytd_tomek = db.session.query(func.sum(Transaction.amount)).filter(
-        Transaction.is_income == True, Transaction.person == PERSON_TOMEK,
-        extract('year', Transaction.date) == ytd_label_year,
-        extract('month', Transaction.date) <= (selected_month_for_details if ytd_label_year == today.year else 12)
-    ).scalar() or 0.0
-    income_ytd_tocka = db.session.query(func.sum(Transaction.amount)).filter(
-        Transaction.is_income == True, Transaction.person == PERSON_TOCKA,
-        extract('year', Transaction.date) == ytd_label_year,
-        extract('month', Transaction.date) <= (selected_month_for_details if ytd_label_year == today.year else 12)
-    ).scalar() or 0.0
-
-    shared_expenses_total_ytd = db.session.query(func.sum(Transaction.amount)).filter(
-        Transaction.is_income == False,
-        extract('year', Transaction.date) == ytd_label_year,
-        extract('month', Transaction.date) <= (selected_month_for_details if ytd_label_year == today.year else 12),
-        Transaction.category_id.in_(shared_category_ids) # Używamy wcześniej zdefiniowanych shared_category_ids
-    ).scalar() or 0.0
+    income_ytd_tomek = db.session.query(func.sum(Transaction.amount)).filter(Transaction.is_income == True, Transaction.person == PERSON_TOMEK, extract('year', Transaction.date) == ytd_label_year, extract('month', Transaction.date) <= (selected_month_for_details if ytd_label_year == today.year else 12)).scalar() or 0.0
+    income_ytd_tocka = db.session.query(func.sum(Transaction.amount)).filter(Transaction.is_income == True, Transaction.person == PERSON_TOCKA, extract('year', Transaction.date) == ytd_label_year, extract('month', Transaction.date) <= (selected_month_for_details if ytd_label_year == today.year else 12)).scalar() or 0.0
+    shared_expenses_total_ytd = db.session.query(func.sum(Transaction.amount)).filter(Transaction.is_income == False, extract('year', Transaction.date) == ytd_label_year, extract('month', Transaction.date) <= (selected_month_for_details if ytd_label_year == today.year else 12), Transaction.category_id.in_(shared_category_ids)).scalar() or 0.0
     individual_share_of_shared_expenses_ytd = shared_expenses_total_ytd / 2
-
-    private_expenses_ytd_tomek = db.session.query(func.sum(Transaction.amount)).filter(
-        Transaction.is_income == False, Transaction.person == PERSON_TOMEK,
-        extract('year', Transaction.date) == ytd_label_year,
-        extract('month', Transaction.date) <= (selected_month_for_details if ytd_label_year == today.year else 12),
-        Transaction.category_id.notin_(shared_category_ids)
-    ).scalar() or 0.0
+    private_expenses_ytd_tomek = db.session.query(func.sum(Transaction.amount)).filter(Transaction.is_income == False, Transaction.person == PERSON_TOMEK, extract('year', Transaction.date) == ytd_label_year, extract('month', Transaction.date) <= (selected_month_for_details if ytd_label_year == today.year else 12), Transaction.category_id.notin_(shared_category_ids)).scalar() or 0.0
     total_expenses_ytd_tomek = private_expenses_ytd_tomek + individual_share_of_shared_expenses_ytd
     savings_ytd_tomek = income_ytd_tomek - total_expenses_ytd_tomek
-
-    private_expenses_ytd_tocka = db.session.query(func.sum(Transaction.amount)).filter(
-        Transaction.is_income == False, Transaction.person == PERSON_TOCKA,
-        extract('year', Transaction.date) == ytd_label_year,
-        extract('month', Transaction.date) <= (selected_month_for_details if ytd_label_year == today.year else 12),
-        Transaction.category_id.notin_(shared_category_ids)
-    ).scalar() or 0.0
+    private_expenses_ytd_tocka = db.session.query(func.sum(Transaction.amount)).filter(Transaction.is_income == False, Transaction.person == PERSON_TOCKA, extract('year', Transaction.date) == ytd_label_year, extract('month', Transaction.date) <= (selected_month_for_details if ytd_label_year == today.year else 12), Transaction.category_id.notin_(shared_category_ids)).scalar() or 0.0
     total_expenses_ytd_tocka = private_expenses_ytd_tocka + individual_share_of_shared_expenses_ytd
     savings_ytd_tocka = income_ytd_tocka - total_expenses_ytd_tocka
-    # --- KONIEC SEKCJI DANYCH ROCZNYCH (YTD) ---
 
-    # --- DANE DLA WYKRESU TRENDÓW MIESIĘCZNYCH ---
     monthly_trends_data = {"labels": [], "incomes": [], "expenses": []}
-    polskie_miesiace_abbr = ["", "Sty", "Lut", "Mar", "Kwi", "Maj", "Cze", "Lip", "Sie", "Wrz", "Paź", "Lis", "Gru"]
-
-    year_for_trends_chart = selected_year_for_details # Rok dla trendów to ROK WYBRANY W DROPDOWNIE
-
+    polskie_miesiace_abbr = ["", "sty", "lut", "mar", "kwi", "maj", "cze", "lip", "sie", "wrz", "paź", "lis", "gru"]
+    year_for_trends_chart = selected_year_for_details
     last_month_for_trends_display = 0
     if year_for_trends_chart == today.year:
         last_month_for_trends_display = today.month -1 
-        if last_month_for_trends_display == 0 : # Jeśli jest styczeń, a pokazujemy poprzedni miesiąc
-            # W tym przypadku, jeśli chcemy pokazać coś sensownego dla "bieżącego roku",
-            # a jest styczeń, to nie ma poprzedniego miesiąca *w tym roku*.
-            # Można by pokazać grudzień poprzedniego roku, ale to komplikuje logikę "tylko wybrany rok".
-            # Na razie, jeśli jest styczeń i wybrano bieżący rok, wykres trendów będzie pusty.
-             last_month_for_trends_display = 0 # Sprawi, że pętla nie wykona się
-    elif year_for_trends_chart < today.year: # Wybrany rok jest rokiem przeszłym
-        last_month_for_trends_display = 12 # Pokaż wszystkie 12 miesięcy
-    else: # Wybrany rok jest rokiem przyszłym (teoretycznie nie powinno się zdarzyć z dropdownu)
-        last_month_for_trends_display = 0
-
-
+        if last_month_for_trends_display == 0 : last_month_for_trends_display = 0
+    elif year_for_trends_chart < today.year: last_month_for_trends_display = 12
+    else: last_month_for_trends_display = 0
     for month_num in range(1, last_month_for_trends_display + 1):
         month_label = polskie_miesiace_abbr[month_num]
         monthly_trends_data["labels"].append(f"{month_label} '{str(year_for_trends_chart)[-2:]}")
-
-        month_income_trend = db.session.query(func.sum(Transaction.amount)).filter(
-            Transaction.is_income == True,
-            extract('year', Transaction.date) == year_for_trends_chart,
-            extract('month', Transaction.date) == month_num
-        ).scalar() or 0.0
+        month_income_trend = db.session.query(func.sum(Transaction.amount)).filter(Transaction.is_income == True, extract('year', Transaction.date) == year_for_trends_chart, extract('month', Transaction.date) == month_num).scalar() or 0.0
         monthly_trends_data["incomes"].append(month_income_trend)
-
-        month_expense_trend = db.session.query(func.sum(Transaction.amount)).filter(
-            Transaction.is_income == False,
-            extract('year', Transaction.date) == year_for_trends_chart,
-            extract('month', Transaction.date) == month_num
-        ).scalar() or 0.0
+        month_expense_trend = db.session.query(func.sum(Transaction.amount)).filter(Transaction.is_income == False, extract('year', Transaction.date) == year_for_trends_chart, extract('month', Transaction.date) == month_num).scalar() or 0.0
         monthly_trends_data["expenses"].append(month_expense_trend)
-    # --- KONIEC DANYCH DLA WYKRESU TRENDÓW MIESIĘCZNYCH ---
+    
+    all_db_categories_for_colors = Category.query.order_by(Category.id).all() # Zmieniono nazwę zmiennej
+    category_color_map = {}
+    all_possible_chart_labels = set()
+    for cat_obj in all_db_categories_for_colors: # Użyto nowej nazwy
+        if cat_obj.name.lower() != "przychód ogólny": # Porównanie z małą literą
+            all_possible_chart_labels.add(cat_obj.name)
+            if cat_obj.is_shared_expense:
+                all_possible_chart_labels.add(f"{cat_obj.name} (udział)")
+    sorted_chart_labels = sorted(list(all_possible_chart_labels))
+    for i, label_name in enumerate(sorted_chart_labels):
+        category_color_map[label_name] = CATEGORY_COLORS_PALETTE[i % len(CATEGORY_COLORS_PALETTE)]
 
     return render_template('index.html',
                            transactions=transactions_selected_month,
@@ -210,7 +161,7 @@ def index():
                            savings_tocka=savings_tocka_selected_month,
                            total_expenses_raw=total_expenses_raw_selected_month,
                            savings_total_month=savings_total_selected_month,
-                           year_to_date_label=ytd_label_year, # Używamy roku, dla którego liczono YTD
+                           year_to_date_label=ytd_label_year,
                            total_income_ytd_couple=total_income_ytd_couple,
                            total_expenses_raw_ytd_couple=total_expenses_raw_ytd_couple,
                            savings_ytd_total_couple=savings_ytd_total_couple,
@@ -227,8 +178,10 @@ def index():
                            current_month_name=current_month_name_for_details,
                            PERSON_TOMEK=PERSON_TOMEK,
                            PERSON_TOCKA=PERSON_TOCKA,
-                           monthly_trends_data=monthly_trends_data 
+                           monthly_trends_data=monthly_trends_data,
+                           category_color_map=category_color_map
                            )
+
 
 
 # Reszta pliku routes.py (add_transaction, API itp.) pozostaje bez zmian
