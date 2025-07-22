@@ -9,6 +9,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    <!-- ChartJS Datalabels Plugin - dodany PO Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0/dist/chartjs-plugin-datalabels.min.js"></script>
 </head>
 <body>
     <nav class="navbar navbar-expand-lg navbar-light mb-4">
@@ -24,7 +26,6 @@
                     <li class="nav-item">
                         <a class="nav-link {% if request.endpoint == 'main.index' %}active{% endif %}" href="{{ url_for('main.index') }}">bilans</a>
                     </li>
-                    <!-- NOWY LINK DO PORTFELA -->
                     <li class="nav-item">
                         <a class="nav-link {% if request.endpoint.startswith('main.portfolio') %}active{% endif %}" href="{{ url_for('main.portfolio_index') }}">portfel</a>
                     </li>
