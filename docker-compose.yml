@@ -1,0 +1,12 @@
+version: '3.8'
+
+services:
+  web:
+    build: .
+    ports:
+      - "5000:5000"
+    env_file:
+      - .env
+    volumes:
+      - .:/app
+    command: ["gunicorn", "--bind", "0.0.0.0:5000", "--reload", "run:app"]

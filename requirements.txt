@@ -6,3 +6,6 @@ google-generativeai
 Flask-WTF # Opcjonalnie, dla lepszych formularzy
 Flask-Moment
 pytz
+psycopg2-binary
+gunicorn
+pandas

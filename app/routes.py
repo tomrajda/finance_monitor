@@ -4,7 +4,7 @@ from flask import render_template, request, redirect, url_for, flash, jsonify, c
 from app import db
 from app.services import suggest_category_gemini, get_monthly_summary_gemini
 # Upewnij się, że wszystkie modele są importowane
-from app.models import Transaction, Category, Account, Portfolio, AssetCategory, Asset, AssetValueHistory, PortfolioSnapshot
+from app.models import Transaction, Category, Account, Portfolio, AssetCategory, Asset, AssetValueHistory, PortfolioSnapshot, SavingsGoal
 from datetime import datetime, date, timedelta 
 from sqlalchemy import extract, func, and_ # func i desc mogą być potrzebne
 from sqlalchemy import desc # <<< DODAJ TEN IMPORT
@@ -182,11 +182,166 @@ def index():
                            category_color_map=category_color_map
                            )
 
+@main_bp.route('/bilans-roczny', methods=['GET'])
+def yearly_balance():
+    today = date.today()
+    
+    years_with_data_query = db.session.query(extract('year', Transaction.date)).distinct().all()
+    years_with_data = sorted([r[0] for r in years_with_data_query if r[0] is not None], reverse=True)
+    
+    if not years_with_data:
+        years_with_data = [today.year]
 
+    selected_year = request.args.get('year', default=years_with_data[0], type=int)
 
-# Reszta pliku routes.py (add_transaction, API itp.) pozostaje bez zmian
-# w stosunku do ostatniej działającej wersji.
-# Upewnij się, że masz tutaj kompletny i poprawny kod dla pozostałych tras.
+    # --- ZOPTYMALIZOWANE POBIERANIE DANYCH YTD ---
+    income_sums_ytd = db.session.query(
+        Transaction.person, func.sum(Transaction.amount)
+    ).filter(
+        Transaction.is_income == True,
+        extract('year', Transaction.date) == selected_year
+    ).group_by(Transaction.person).all()
+    
+    income_ytd_map = dict(income_sums_ytd)
+    income_ytd_tomek = income_ytd_map.get(PERSON_TOMEK, 0.0)
+    income_ytd_tocka = income_ytd_map.get(PERSON_TOCKA, 0.0)
+    total_income_ytd = income_ytd_tomek + income_ytd_tocka
+
+    shared_categories = Category.query.filter_by(is_shared_expense=True).all()
+    shared_category_ids = [cat.id for cat in shared_categories]
+
+    expense_sums_ytd = db.session.query(
+        Transaction.person,
+        Category.name,
+        Category.is_shared_expense,
+        func.sum(Transaction.amount)
+    ).join(Category).filter(
+        Transaction.is_income == False,
+        extract('year', Transaction.date) == selected_year
+    ).group_by(Transaction.person, Category.name, Category.is_shared_expense).all()
+
+    total_expenses_raw_ytd = 0
+    shared_expenses_ytd = 0
+    private_expenses_ytd_tomek = 0
+    private_expenses_ytd_tocka = 0
+    expenses_ytd_overall_dict = {}
+    expenses_ytd_tomek_dict = {}
+    expenses_ytd_tocka_dict = {}
+
+    for person, cat_name, is_shared, amount in expense_sums_ytd:
+        total_expenses_raw_ytd += amount
+        expenses_ytd_overall_dict[cat_name] = expenses_ytd_overall_dict.get(cat_name, 0) + amount
+        if is_shared:
+            shared_expenses_ytd += amount
+        else:
+            if person == PERSON_TOMEK:
+                private_expenses_ytd_tomek += amount
+                expenses_ytd_tomek_dict[cat_name] = expenses_ytd_tomek_dict.get(cat_name, 0) + amount
+            elif person == PERSON_TOCKA:
+                private_expenses_ytd_tocka += amount
+                expenses_ytd_tocka_dict[cat_name] = expenses_ytd_tocka_dict.get(cat_name, 0) + amount
+    
+    individual_share_ytd = shared_expenses_ytd / 2
+    shared_categories_in_year = {k: v for k, v in expenses_ytd_overall_dict.items() if k in [c.name for c in shared_categories]}
+    for cat_name, total_amount in shared_categories_in_year.items():
+        share_amount = total_amount / 2
+        if share_amount > 0:
+            expenses_ytd_tomek_dict[f"{cat_name} (udział)"] = share_amount
+            expenses_ytd_tocka_dict[f"{cat_name} (udział)"] = share_amount
+
+    savings_ytd_total_couple = total_income_ytd - total_expenses_raw_ytd
+    savings_ytd_tomek = income_ytd_tomek - (private_expenses_ytd_tomek + individual_share_ytd)
+    savings_ytd_tocka = income_ytd_tocka - (private_expenses_ytd_tocka + individual_share_ytd)
+    
+    # ZMIANA TUTAJ: Sortowanie wszystkich słowników malejąco (od największego do najmniejszego)
+    expenses_ytd_overall_dict = dict(sorted(expenses_ytd_overall_dict.items(), key=lambda item: item[1], reverse=True))
+    expenses_ytd_tomek_dict = dict(sorted(expenses_ytd_tomek_dict.items(), key=lambda item: item[1], reverse=True))
+    expenses_ytd_tocka_dict = dict(sorted(expenses_ytd_tocka_dict.items(), key=lambda item: item[1], reverse=True))
+
+    # --- DANE DLA TABELI PODSUMOWUJĄCEJ MIESIĄCE ---
+    monthly_summary_q = db.session.query(
+        extract('month', Transaction.date).label('month'),
+        Transaction.is_income,
+        func.sum(Transaction.amount).label('total')
+    ).filter(
+        extract('year', Transaction.date) == selected_year
+    ).group_by('month', Transaction.is_income).all()
+    
+    monthly_summary_map = {}
+    for month_decimal, is_income, total in monthly_summary_q:
+        month = int(month_decimal)
+        if month not in monthly_summary_map:
+            monthly_summary_map[month] = {'income': 0.0, 'expense': 0.0}
+        if is_income:
+            monthly_summary_map[month]['income'] = total
+        else:
+            monthly_summary_map[month]['expense'] = total
+
+    monthly_summary_data = []
+    polskie_miesiace = ["", "Styczeń", "Luty", "Marzec", "Kwiecień", "Maj", "Czerwiec", "Lipiec", "Sierpień", "Wrzesień", "Październik", "Listopad", "Grudzień"]
+    for month_num in sorted(monthly_summary_map.keys()):
+        data = monthly_summary_map[month_num]
+        monthly_summary_data.append({
+            "month_name": polskie_miesiace[month_num],
+            "income": data['income'],
+            "expense": data['expense'],
+            "savings": data['income'] - data['expense']
+        })
+
+    # --- POBIERANIE CELU OSZCZĘDNOŚCIOWEGO ---
+    savings_goal = SavingsGoal.query.get(selected_year)
+    if not savings_goal:
+        savings_goal = SavingsGoal(year=selected_year, goal_total=0.0, goal_tomek=0.0, goal_tocka=0.0)
+
+    return render_template('yearly_balance.html',
+                           selected_year=selected_year,
+                           years_with_data=years_with_data,
+                           savings_ytd_total_couple=savings_ytd_total_couple,
+                           savings_ytd_tomek=savings_ytd_tomek,
+                           savings_ytd_tocka=savings_ytd_tocka,
+                           expenses_ytd_overall_dict=expenses_ytd_overall_dict,
+                           expenses_ytd_tomek_dict=expenses_ytd_tomek_dict,
+                           expenses_ytd_tocka_dict=expenses_ytd_tocka_dict,
+                           savings_goal=savings_goal,
+                           monthly_summary_data=monthly_summary_data,
+                           PERSON_TOMEK=PERSON_TOMEK,
+                           PERSON_TOCKA=PERSON_TOCKA
+                           )
+
+# --- NOWE TRASY API DLA CELÓW OSZCZĘDNOŚCIOWYCH ---
+@main_bp.route('/api/save_goal', methods=['POST'])
+def save_goal():
+    data = request.get_json()
+    year = data.get('year')
+    goal_total = data.get('goal_total')
+    goal_tomek = data.get('goal_tomek')
+    goal_tocka = data.get('goal_tocka')
+
+    if not year:
+        return jsonify({'success': False, 'message': 'Rok jest wymagany.'}), 400
+    
+    try:
+        goal_total = float(goal_total) if goal_total else 0.0
+        goal_tomek = float(goal_tomek) if goal_tomek else 0.0
+        goal_tocka = float(goal_tocka) if goal_tocka else 0.0
+    except (ValueError, TypeError):
+        return jsonify({'success': False, 'message': 'Wartości celu muszą być liczbami.'}), 400
+
+    goal = SavingsGoal.query.get(year)
+    if not goal:
+        goal = SavingsGoal(year=year)
+        db.session.add(goal)
+    
+    goal.goal_total = goal_total
+    goal.goal_tomek = goal_tomek
+    goal.goal_tocka = goal_tocka
+
+    try:
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Cel oszczędnościowy został zapisany.'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': f'Błąd zapisu: {e}'}), 500
 
 # --- NOWA TRASA API DLA PODSUMOWANIA GEMINI ---
 @main_bp.route('/api/get_gemini_summary', methods=['GET'])

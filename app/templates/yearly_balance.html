@@ -1,0 +1,268 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<style>
+    .progress { height: 1.5rem; font-size: 0.8rem; background-color: #e9ecef; }
+    .progress-bar { font-weight: 600; transition: width 0.6s ease-in-out; }
+</style>
+
+<div class="row mb-3 align-items-center">
+    <div class="col-md-8">
+        <h2>Bilans Roczny - {{ selected_year }}</h2>
+    </div>
+    <div class="col-md-4">
+        <form method="GET" action="{{ url_for('main.yearly_balance') }}" class="form-inline float-md-right">
+            <div class="form-group mr-2 mb-2 mb-md-0"><label for="year_select" class="mr-2">Wybierz rok:</label><select name="year" id="year_select" class="form-control form-control-sm">{% for year_val in years_with_data %}<option value="{{ year_val }}" {% if year_val == selected_year %}selected{% endif %}>{{ year_val }}</option>{% endfor %}</select></div>
+            <button type="submit" class="btn btn-sm btn-primary">Pokaż</button>
+        </form>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center"><h5 class="mb-0">Postęp w Osiąganiu Celu Oszczędnościowego ({{ selected_year }})</h5><button class="btn btn-outline-secondary btn-sm" data-toggle="modal" data-target="#goalModal">Ustaw/Edytuj Cel</button></div>
+            <div class="card-body">
+                <label class="font-weight-bold">Łącznie T&M</label>
+                {% set total_progress = (savings_ytd_total_couple / savings_goal.goal_total * 100) if savings_goal.goal_total > 0 else 0 %}
+                <div class="progress mb-3"><div class="progress-bar bg-info" role="progressbar" data-progress="{{ total_progress|round|int }}" aria-valuenow="{{ savings_ytd_total_couple }}" aria-valuemin="0" aria-valuemax="{{ savings_goal.goal_total }}">{{ "%.2f"|format(savings_ytd_total_couple) }} PLN</div></div>
+                <p class="text-right text-muted"><small>Cel: {{ "%.2f"|format(savings_goal.goal_total) }} PLN</small></p>
+                <div class="row">
+                    <div class="col-md-6">
+                        <label class="font-weight-bold">🐻 {{ PERSON_TOMEK }}</label>
+                        {% set tomek_progress = (savings_ytd_tomek / savings_goal.goal_tomek * 100) if savings_goal.goal_tomek > 0 else 0 %}
+                        <div class="progress mb-3"><div class="progress-bar bg-primary" role="progressbar" data-progress="{{ tomek_progress|round|int }}" aria-valuenow="{{ savings_ytd_tomek }}" aria-valuemin="0" aria-valuemax="{{ savings_goal.goal_tomek }}">{{ "%.2f"|format(savings_ytd_tomek) }} PLN</div></div>
+                        <p class="text-right text-muted"><small>Cel: {{ "%.2f"|format(savings_goal.goal_tomek) }} PLN</small></p>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="font-weight-bold">🍑 {{ PERSON_TOCKA }}</label>
+                        {% set tocka_progress = (savings_ytd_tocka / savings_goal.goal_tocka * 100) if savings_goal.goal_tocka > 0 else 0 %}
+                        <div class="progress mb-3"><div class="progress-bar" data-progress="{{ tocka_progress|round|int }}" role="progressbar" style="background-color: #fd7e14;">{{ "%.2f"|format(savings_ytd_tocka) }} PLN</div></div>
+                        <p class="text-right text-muted"><small>Cel: {{ "%.2f"|format(savings_goal.goal_tocka) }} PLN</small></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<h4>Rozkład Wydatków YTD ({{ selected_year }})</h4>
+<div class="row">
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header text-center"><h5>Łącznie T&M</h5></div>
+            <div class="card-body chart-container" style="height: 300px;">
+                {% if expenses_ytd_overall_dict %}
+                <div id="expensesYtdOverallContainer" data-chartdata='{{ expenses_ytd_overall_dict|tojson|safe }}'><canvas id="expensesYtdOverallChart"></canvas></div>
+                {% else %}<p class="text-muted text-center mt-3">Brak wydatków.</p>{% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header text-center"><h5>🐻 {{ PERSON_TOMEK }}</h5></div>
+            <div class="card-body chart-container" style="height: 300px;">
+                {% if expenses_ytd_tomek_dict %}
+                <div id="expensesYtdTomekContainer" data-chartdata='{{ expenses_ytd_tomek_dict|tojson|safe }}'><canvas id="expensesYtdTomekChart"></canvas></div>
+                {% else %}<p class="text-muted text-center mt-3">Brak wydatków.</p>{% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header text-center"><h5>🍑 {{ PERSON_TOCKA }}</h5></div>
+            <div class="card-body chart-container" style="height: 300px;">
+                {% if expenses_ytd_tocka_dict %}
+                <div id="expensesYtdTockaContainer" data-chartdata='{{ expenses_ytd_tocka_dict|tojson|safe }}'><canvas id="expensesYtdTockaChart"></canvas></div>
+                {% else %}<p class="text-muted text-center mt-3">Brak wydatków.</p>{% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header"><h4>Podsumowanie Miesięcy w {{ selected_year }}</h4></div>
+            <div class="card-body p-0">
+                {% if monthly_summary_data %}
+                <div class="table-responsive"><table class="table table-striped table-hover mb-0"><thead><tr><th>Miesiąc</th><th class="text-right">Przychody</th><th class="text-right">Wydatki</th><th class="text-right">Bilans (Oszczędności)</th></tr></thead><tbody>{% for month_data in monthly_summary_data %}<tr><td>{{ month_data.month_name }}</td><td class="text-right text-success">{{ "%.2f"|format(month_data.income) }} PLN</td><td class="text-right text-danger">{{ "%.2f"|format(month_data.expense) }} PLN</td><td class="text-right font-weight-bold {% if month_data.savings >= 0 %}text-info{% else %}text-warning{% endif %}">{{ "%.2f"|format(month_data.savings) }} PLN</td></tr>{% endfor %}</tbody></table></div>
+                {% else %}<p class="text-center text-muted p-3">Brak danych w wybranym roku.</p>{% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="goalModal" tabindex="-1" role="dialog" aria-labelledby="goalModalLabel" aria-hidden="true"><div class="modal-dialog" role="document"><div class="modal-content"><div class="modal-header"><h5 class="modal-title" id="goalModalLabel">Ustaw Cel Oszczędnościowy na Rok {{ selected_year }}</h5><button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">×</span></button></div><div class="modal-body"><form id="goalForm"><input type="hidden" id="goalYear" value="{{ selected_year }}"><div class="form-group"><label for="goalTotal">Łączny cel T&M:</label><input type="number" step="100" class="form-control" id="goalTotal" value="{{ savings_goal.goal_total or '' }}"></div><div class="form-group"><label for="goalTomek">Cel 🐻 Tomek:</label><input type="number" step="100" class="form-control" id="goalTomek" value="{{ savings_goal.goal_tomek or '' }}"></div><div class="form-group"><label for="goalTocka">Cel 🍑 Toćka:</label><input type="number" step="100" class="form-control" id="goalTocka" value="{{ savings_goal.goal_tocka or '' }}"></div></form><div id="goalFormAlert" class="alert mt-3" style="display: none;"></div></div><div class="modal-footer"><button type="button" class="btn btn-secondary" data-dismiss="modal">Anuluj</button><button type="button" class="btn btn-primary" id="saveGoalBtn">Zapisz Cel</button></div></div></div></div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+if (typeof ChartDataLabels !== 'undefined') { Chart.register(ChartDataLabels); }
+
+document.addEventListener('DOMContentLoaded', function () {
+    const modernColorsFallback = [
+        'rgba(255, 99, 132, 0.85)','rgba(54, 162, 235, 0.85)','rgba(255, 206, 86, 0.85)','rgba(75, 192, 192, 0.85)',
+        'rgba(153, 102, 255, 0.85)','rgba(255, 159, 64, 0.85)','rgba(76, 175, 80, 0.85)','rgba(201, 203, 207, 0.85)',
+        'rgba(230, 126, 34, 0.85)','rgba(46, 204, 113, 0.85)','rgba(142, 68, 173, 0.85)','rgba(241, 196, 15, 0.85)'
+    ];
+    let fallbackColorIndex = 0; 
+    const assignedCategoryColors = {};
+    function getCategoryColor(categoryName) {
+        if (assignedCategoryColors[categoryName]) { return assignedCategoryColors[categoryName]; }
+        const color = modernColorsFallback[fallbackColorIndex % modernColorsFallback.length];
+        assignedCategoryColors[categoryName] = color; 
+        fallbackColorIndex++;
+        return color;
+    }
+    function getBorderColorsFromBg(backgroundColors) {
+        return backgroundColors.map(color => {
+            const parts = color.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/);
+            if (parts) { return `rgba(${Math.max(0, parseInt(parts[1]) - 15)}, ${Math.max(0, parseInt(parts[2]) - 15)}, ${Math.max(0, parseInt(parts[3]) - 15)}, 1)`; }
+            return color.replace(/[\d.]+\)$/g, '1)'); 
+        });
+    }
+
+    function createDoughnutChart(canvasId, dataContainerId, labelText) {
+        const ctx = document.getElementById(canvasId);
+        const dataContainer = document.getElementById(dataContainerId);
+        
+        if (!ctx || !dataContainer) {
+            console.error(`Missing canvas or data container for: ${canvasId}`);
+            return;
+        }
+
+        let existingChart = Chart.getChart(ctx);
+        if (existingChart) { existingChart.destroy(); }
+
+        let rawDataString = dataContainer.dataset.chartdata;
+        let rawData;
+        try { rawData = (rawDataString && rawDataString.trim() !== "" && rawDataString.trim() !== "{}") ? JSON.parse(rawDataString) : {}; } 
+        catch (e) { console.error(`Error parsing JSON for ${dataContainerId}:`, e); rawData = {}; }
+        
+        if (Object.keys(rawData).length === 0) { return; }
+
+        const chartLabels = Object.keys(rawData);
+        const dataValues = Object.values(rawData);
+        const backgroundColors = chartLabels.map(label => getCategoryColor(label));
+        const borderColors = getBorderColorsFromBg(backgroundColors);
+
+        new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: chartLabels,
+                datasets: [{
+                    label: labelText,
+                    data: dataValues,
+                    backgroundColor: backgroundColors,
+                    borderColor: borderColors,
+                    borderWidth: 2,
+                    hoverOffset: 10
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                cutout: '60%',
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        enabled: true, backgroundColor: 'rgba(30,30,30,0.85)', titleFont: { family: 'Poppins', size: 13, weight: '600' },
+                        bodyFont: { family: 'Poppins', size: 12 }, padding: 12, cornerRadius: 6,
+                        displayColors: true, borderColor: 'rgba(255,255,255,0.05)', borderWidth: 0.5, boxPadding: 3,
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.label || '';
+                                let value = context.parsed;
+                                if (label) { label += ': '; }
+                                if (value !== null && value !== undefined) { label += new Intl.NumberFormat('pl-PL', { style: 'currency', currency: 'PLN' }).format(value); }
+                                if (context.dataset.data && context.dataset.data.length > 0) {
+                                    const total = context.dataset.data.reduce((sum, val) => sum + parseFloat(val || 0), 0);
+                                    const percentage = total > 0 ? (parseFloat(value || 0) / total * 100) : 0;
+                                    if (percentage > 0.1) { label += ` (${percentage.toFixed(1)}%)`; }
+                                }
+                                return label;
+                            }
+                        }
+                    },
+                    datalabels: {
+                        display: true,
+                        formatter: (value, context) => {
+                            const dataset = context.chart.data.datasets[context.datasetIndex];
+                            if (!dataset.data || dataset.data.length === 0) return '';
+                            const total = dataset.data.reduce((sum, val) => sum + parseFloat(val || 0), 0);
+                            const percentage = total > 0 ? (parseFloat(value || 0) / total * 100) : 0;
+                            return percentage > 3 ? percentage.toFixed(0) + '%' : '';
+                        },
+                        color: (context) => {
+                            const bgColor = context.dataset.backgroundColor[context.dataIndex];
+                            if (bgColor && bgColor.startsWith('rgba')) {
+                                const parts = bgColor.match(/rgba\((\d+),\s*(\d+),\s*(\d+)/);
+                                if (parts) {
+                                    const brightness = (parseInt(parts[1]) * 299 + parseInt(parts[2]) * 587 + parseInt(parts[3]) * 114) / 1000;
+                                    return brightness > 130 ? '#444' : '#fff';
+                                }
+                            } return '#fff';
+                        },
+                        anchor: 'center', align: 'center', font: { weight: 'bold', family: 'Poppins', size: 10 },
+                        padding: 0, textStrokeColor: 'rgba(0,0,0,0.3)', textStrokeWidth: 2,
+                        textShadowColor: 'rgba(0,0,0,0.3)', textShadowBlur: 2
+                    }
+                },
+                layout: { padding: { top: 15, right: 15, bottom: 15, left: 15 } }
+            }
+        });
+    }
+    
+    // Wywołania createChart dla strony Bilans Roczny
+    if (document.getElementById('expensesYtdOverallContainer')) { 
+        createDoughnutChart('expensesYtdOverallChart', 'expensesYtdOverallContainer', 'Wydatki YTD T&M'); 
+    }
+    if (document.getElementById('expensesYtdTomekContainer')) { 
+        createDoughnutChart('expensesYtdTomekChart', 'expensesYtdTomekContainer', 'Wydatki YTD {{ PERSON_TOMEK }}'); 
+    }
+    if (document.getElementById('expensesYtdTockaContainer')) { 
+        createDoughnutChart('expensesYtdTockaChart', 'expensesYtdTockaContainer', 'Wydatki YTD {{ PERSON_TOCKA }}'); 
+    }
+
+    // Obsługa zapisu celu (bez zmian)
+    const saveGoalBtn = document.getElementById('saveGoalBtn');
+    if (saveGoalBtn) {
+        saveGoalBtn.addEventListener('click', async function() {
+            const year = document.getElementById('goalYear').value;
+            const goalTotal = document.getElementById('goalTotal').value;
+            const goalTomek = document.getElementById('goalTomek').value;
+            const goalTocka = document.getElementById('goalTocka').value;
+            const alertBox = document.getElementById('goalFormAlert');
+            this.disabled = true; this.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Zapisywanie...';
+            try {
+                const response = await fetch("{{ url_for('main.save_goal') }}", {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ year, goal_total: goalTotal, goal_tomek: goalTomek, goal_tocka: goalTocka })
+                });
+                const data = await response.json();
+                alertBox.className = 'alert mt-3';
+                if (response.ok) {
+                    alertBox.classList.add('alert-success'); alertBox.textContent = data.message; alertBox.style.display = 'block';
+                    setTimeout(() => { $('#goalModal').modal('hide'); window.location.reload(); }, 1500);
+                } else {
+                    alertBox.classList.add('alert-danger'); alertBox.textContent = data.message; alertBox.style.display = 'block';
+                }
+            } catch (error) {
+                alertBox.className = 'alert mt-3 alert-danger'; alertBox.textContent = "Błąd połączenia z serwerem."; alertBox.style.display = 'block';
+            } finally { this.disabled = false; this.textContent = 'Zapisz Cel'; }
+        });
+    }
+    
+    // Ustawianie szerokości pasków postępu
+    function setProgressBars() {
+        document.querySelectorAll('.progress-bar[data-progress]').forEach(bar => {
+            const progressValue = bar.dataset.progress;
+            const width = Math.min(parseInt(progressValue, 10) || 0, 100);
+            bar.style.width = width + '%';
+        });
+    }
+    setProgressBars();
+});
+</script>
+{% endblock %}

@@ -1,0 +1,3 @@
+-kolor do bazy danych zeby mial zawsze ten sam na wykresie unikalny
+-Postęp w Osiąganiu Celu Oszczędnościowego (2025) - naprawa zle wartosdci
+=Rozkład Wydatków YTD (2025) - ascdeing order
