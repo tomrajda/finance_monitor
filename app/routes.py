@@ -2,7 +2,7 @@
 
 from flask import render_template, request, redirect, url_for, flash, jsonify, current_app, Blueprint
 from app import db
-from app.services import suggest_category_gemini, get_monthly_summary_gemini
+from app.services import suggest_category_gemini, get_monthly_summary_gemini, get_yearly_summary_gemini
 # Upewnij się, że wszystkie modele są importowane
 from app.models import Transaction, Category, Account, Portfolio, AssetCategory, Asset, AssetValueHistory, PortfolioSnapshot
 from datetime import datetime, date, timedelta 
@@ -231,6 +231,70 @@ def yearly_summary():
                            # Przekazujemy nową, posortowaną strukturę danych
                            expenses_ytd_chart_data=expenses_ytd_chart_data
                            )
+
+@main_bp.route('/api/get_yearly_summary', methods=['GET'])
+def api_get_yearly_summary():
+    if not current_app.config.get('GEMINI_API_KEY'):
+        return jsonify({'error': 'Klucz API Gemini nie jest skonfigurowany.'}), 500
+
+    year = request.args.get('year', type=int)
+    if not year:
+        return jsonify({'error': 'Rok jest wymagany.'}), 400
+    
+    # 1. Oblicz dane ogólne
+    total_income_ytd = db.session.query(func.sum(Transaction.amount)).filter(Transaction.is_income == True, extract('year', Transaction.date) == year).scalar() or 0.0
+    total_expenses_ytd = db.session.query(func.sum(Transaction.amount)).filter(Transaction.is_income == False, extract('year', Transaction.date) == year).scalar() or 0.0
+    total_savings_ytd = total_income_ytd - total_expenses_ytd
+    savings_rate_ytd = (total_savings_ytd / total_income_ytd * 100) if total_income_ytd > 0 else 0
+    num_months_with_data = db.session.query(func.count(func.distinct(extract('month', Transaction.date)))).filter(extract('year', Transaction.date) == year, Transaction.amount > 0).scalar() or 1
+    avg_monthly_savings = total_savings_ytd / num_months_with_data
+
+    # 2. Znajdź top 3 kategorie
+    top_cats_q = db.session.query(Category.name, func.sum(Transaction.amount)).join(Category).filter(
+        Transaction.is_income == False, extract('year', Transaction.date) == year
+    ).group_by(Category.name).order_by(func.sum(Transaction.amount).desc()).limit(3).all()
+    top_categories = {cat: amount for cat, amount in top_cats_q}
+
+    # 3. Znajdź najlepszy i najgorszy miesiąc
+    # POPRAWIONA SKŁADNIA ZAPYTANIA
+    monthly_summary_q = db.session.query(
+        extract('month', Transaction.date).label('month'),
+        func.sum(db.case((Transaction.is_income == True, Transaction.amount), else_=0)).label('income'),
+        func.sum(db.case((Transaction.is_income == False, Transaction.amount), else_=0)).label('expense')
+    ).filter(
+        extract('year', Transaction.date) == year
+    ).group_by('month').all()
+    
+    monthly_savings = []
+    # Wynik zapytania będzie teraz (miesiąc, suma_przychodów, suma_wydatków)
+    for month_decimal, income, expense in monthly_summary_q:
+        income = income or 0.0
+        expense = expense or 0.0
+        monthly_savings.append({"month": int(month_decimal), "savings": income - expense})
+    
+    best_month = max(monthly_savings, key=lambda x: x['savings']) if monthly_savings else {}
+    worst_month = min(monthly_savings, key=lambda x: x['savings']) if monthly_savings else {}
+    
+    polskie_miesiace = ["", "Styczeń", "Luty", "Marzec", "Kwiecień", "Maj", "Czerwiec", "Lipiec", "Sierpień", "Wrzesień", "Październik", "Listopad", "Grudzień"]
+    best_month_data = {"name": polskie_miesiace[best_month.get("month", 0)], "savings": best_month.get("savings", 0.0)}
+    worst_month_data = {"name": polskie_miesiace[worst_month.get("month", 0)], "savings": worst_month.get("savings", 0.0)}
+
+    # 4. Wywołaj Gemini
+    summary_text = get_yearly_summary_gemini(
+        selected_year=year,
+        total_income_ytd=total_income_ytd,
+        total_expenses_ytd=total_expenses_ytd,
+        total_savings_ytd=total_savings_ytd,
+        avg_monthly_savings=avg_monthly_savings,
+        savings_rate_ytd=savings_rate_ytd,
+        top_categories=top_categories,
+        best_month=best_month_data,
+        worst_month=worst_month_data
+    )
+    
+    # Używamy jsonify, które automatycznie konwertuje na JSON. Zastąpienie \n na <br> jest zbędne, jeśli frontend sam to robi.
+    # Ale dla pewności zostawmy, jeśli frontend oczekuje gotowego HTML.
+    return jsonify({'summary_html': summary_text.replace('\n', '<br>')})
 
 # --- NOWA TRASA API DLA PODSUMOWANIA GEMINI ---
 @main_bp.route('/api/get_gemini_summary', methods=['GET'])

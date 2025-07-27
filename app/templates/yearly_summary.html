@@ -18,7 +18,7 @@
     <div class="col-md-4">
         <form method="GET" action="{{ url_for('main.yearly_summary') }}" class="form-inline float-md-right">
             <div class="form-group mr-2 mb-2 mb-md-0">
-                <label for="year_select" class="mr-2">Wybierz rok:</label>
+                <label for="year_select" class="mr-2"></label>
                 <select name="year" id="year_select" class="form-control form-control-sm" onchange="this.form.submit()">
                     {% for year_val in years_with_data %}
                     <option value="{{ year_val }}" {% if year_val == selected_year %}selected{% endif %}>{{ year_val }}</option>
@@ -77,6 +77,23 @@
         </div>
     </div>
 </div>
+
+<!-- NOWA SEKCJA: PODSUMOWANIE AI (GEMINI) -->
+<div class="row mt-4 mb-4">
+    <div class="col-12 text-center">
+        <button id="generateYearlySummaryBtn" class="btn btn-outline-primary btn-rounded">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-stars mr-1" viewBox="0 0 16 16"><path d="M7.657 6.247c.11-.33.576-.33.686 0l.645 1.937a2.89 2.89 0 0 0 1.829 1.828l1.936.645c.33.11.33.576 0 .686l-1.937.645a2.89 2.89 0 0 0-1.828 1.829l-.645 1.936a.361.361 0 0 1-.686 0l-.645-1.937a2.89 2.89 0 0 0-1.828-1.828l-1.937-.645a.361.361 0 0 1 0-.686l1.937-.645a2.89 2.89 0 0 0 1.828-1.828zM3.794 1.148a.217.217 0 0 1 .412 0l.387 1.162c.173.518.579.924 1.097 1.097l1.162.387a.217.217 0 0 1 0 .412l-1.162.387A1.73 1.73 0 0 0 4.593 5.69l-.387 1.162a.217.217 0 0 1-.412 0L3.407 5.69A1.73 1.73 0 0 0 2.31 4.593l-1.162-.387a.217.217 0 0 1 0-.412l1.162-.387A1.73 1.73 0 0 0 3.407 2.31zM10.863.099a.145.145 0 0 1 .274 0l.258.774c.115.346.386.617.732.732l.774.258a.145.145 0 0 1 0 .274l-.774.258a1.16 1.16 0 0 0-.732.732l-.258.774a.145.145 0 0 1-.274 0l-.258-.774a1.16 1.16 0 0 0-.732-.732l-.774-.258a.145.145 0 0 1 0-.274l.774-.258c.346-.115.617-.386.732-.732z"/></svg>
+            Podsumowanie AI
+        </button>
+    </div>
+</div>
+<div id="geminiYearlySummaryContainer" class="row mt-2" style="display: none;">
+    <div class="col-md-12">
+        <div class="card"><div class="card-body"><div id="geminiYearlySummaryContent" class="gemini-summary"></div></div></div>
+    </div>
+</div>
+<!-- KONIEC SEKCJI AI -->
+
 {% endblock %}
 
 {% block scripts %}
@@ -87,10 +104,6 @@ window.addEventListener('load', function () {
     if (typeof ChartDataLabels !== 'undefined') {
         Chart.register(ChartDataLabels);
     }
-    
-    // ZMIANA: Usunięto rejestrację pluginu centerTextPlugin, bo nie jest już potrzebny
-    // const centerTextPlugin = { ... };
-    // Chart.register(centerTextPlugin);
 
     // Funkcje pomocnicze do kolorów
     const modernColorsFallback = [
@@ -119,7 +132,7 @@ window.addEventListener('load', function () {
             const dataValues = rawData.data;
             const backgroundColors = chartLabels.map(() => getColor());
             const borderColors = backgroundColors.map(c => c.replace('0.85', '1'));
-
+            
             new Chart(canvas, {
                 type: 'doughnut',
                 data: {
@@ -138,9 +151,7 @@ window.addEventListener('load', function () {
                     cutout: '60%',
                     parsing: false,
                     plugins: {
-                        legend: { 
-                            display: false
-                        },
+                        legend: { display: false },
                         tooltip: {
                             callbacks: {
                                 label: function(context) {
@@ -172,6 +183,38 @@ window.addEventListener('load', function () {
                 }
             });
         }
+    }
+
+    // Obsługa przycisku dla rocznej analizy Gemini
+    const generateYearlyBtn = document.getElementById('generateYearlySummaryBtn');
+    const yearlyContainer = document.getElementById('geminiYearlySummaryContainer');
+    const yearlyContent = document.getElementById('geminiYearlySummaryContent');
+    const selectedYearForSummary = document.getElementById('year_select').value;
+
+    if(generateYearlyBtn && yearlyContainer && yearlyContent) {
+        generateYearlyBtn.addEventListener('click', async function() {
+            this.disabled = true;
+            const originalButtonHtml = this.innerHTML;
+            this.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Generowanie...`;
+            
+            yearlyContent.innerHTML = '<p class="text-info">Pobieranie rocznej analizy od AI. To może chwilę potrwać...</p>';
+            yearlyContainer.style.display = 'block';
+
+            try {
+                const response = await fetch(`{{ url_for('main.api_get_yearly_summary') }}?year=${selectedYearForSummary}`);
+                const data = await response.json();
+                if (response.ok) {
+                    yearlyContent.innerHTML = data.summary_html;
+                } else {
+                    yearlyContent.innerHTML = `<p class="text-danger">Wystąpił błąd: ${data.error || 'Nieznany błąd serwera'}</p>`;
+                }
+            } catch(error) {
+                yearlyContent.innerHTML = '<p class="text-danger">Nie można połączyć się z serwerem.</p>';
+            } finally {
+                this.disabled = false;
+                this.innerHTML = originalButtonHtml;
+            }
+        });
     }
 });
 </script>

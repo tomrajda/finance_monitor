@@ -105,3 +105,61 @@ def get_monthly_summary_gemini(month_name: str, year: int, income_total: float, 
         print(f"Błąd Gemini (podsumowanie): {e}")
         return "### Błąd Generowania Podsumowania\n\nNie udało się wygenerować podsumowania z powodu błędu. Spróbuj ponownie później."
     
+def get_yearly_summary_gemini(
+    selected_year: int,
+    total_income_ytd: float,
+    total_expenses_ytd: float,
+    total_savings_ytd: float,
+    avg_monthly_savings: float,
+    savings_rate_ytd: float,
+    top_categories: dict,
+    best_month: dict,
+    worst_month: dict
+) -> str:
+    """Generuje roczny raport finansowy i strategiczne porady używając Gemini."""
+    
+    top_categories_str = "\n".join([f"- {cat}: {amount:.2f} PLN" for cat, amount in top_categories.items()])
+    best_month_name = best_month.get("name", "Brak danych")
+    best_month_savings = best_month.get("savings", 0.0)
+    worst_month_name = worst_month.get("name", "Brak danych")
+    worst_month_savings = worst_month.get("savings", 0.0)
+
+    prompt = f"""
+    Jesteś analitykiem finansowym i coachem specjalizującym się w długoterminowych strategiach dla par. Twoim zadaniem jest stworzenie rocznego raportu finansowego dla pary T&M na podstawie poniższych danych za rok {selected_year}. Używaj języka polskiego, formatowania Markdown (nagłówki, pogrubienia, listy), a ton ma być profesjonalny, ale jednocześnie motywujący i optymistyczny.
+
+    **Dane Roczne:**
+    - Całkowity przychód: {total_income_ytd:.2f} PLN
+    - Całkowite wydatki: {total_expenses_ytd:.2f} PLN
+    - Całkowite oszczędności: {total_savings_ytd:.2f} PLN
+    - Średnie miesięczne oszczędności: {avg_monthly_savings:.2f} PLN
+    - Roczna stopa oszczędności: {savings_rate_ytd:.1f}%
+
+    **Kluczowe obserwacje:**
+    - Kategorie z największymi wydatkami w roku:
+    {top_categories_str}
+    - Najlepszy miesiąc pod względem oszczędności: {best_month_name} ({best_month_savings:.2f} PLN)
+    - Najtrudniejszy miesiąc pod względem oszczędności: {worst_month_name} ({worst_month_savings:.2f} PLN)
+
+    **Zadania do wykonania:**
+
+    1.  **Tytuł Raportu:** Stwórz inspirujący tytuł, np. "Wasz Finansowy Rok {selected_year}: Analiza i Krok w Przyszłość".
+
+    2.  **Podsumowanie Ogólne ("Executive Summary"):** W 2-3 zdaniach podsumuj, jaki to był rok dla finansów pary. Skup się na kluczowej metryce – rocznej stopie oszczędności, porównując ją do zalecanych w Polsce 10-20%.
+
+    3.  **Głęboka Analiza ("Deep Dive"):**
+        *   **Nawyki Wydatkowe:** Skomentuj top 3 kategorie. Czy są one zgodne z celami i wartościami pary (np. "Duże wydatki na 'Podróże' pokazują, że cenicie sobie wspólne doświadczenia")? Czy któraś kategoria jest zaskoczeniem?
+        *   **Zmienność w Czasie:** Porównaj najlepszy i najtrudniejszy miesiąc. Co mogło być przyczyną różnic? (np. "Widać, że {best_month_name} był świetny – być może to efekt premii lub niższych wydatków. Z kolei w {worst_month_name} mogły pojawić się nieplanowane koszty.").
+
+    4.  **Strategiczne Rekomendacje na Następny Rok:**
+        *   **Cel na {selected_year + 1}:** Bazując na średnich miesięcznych oszczędnościach, zaproponuj realistyczny, ale ambitny cel oszczędnościowy na kolejny rok.
+        *   **"Jedna Zmiana":** Zaproponuj jedną, konkretną zmianę lub nawyk, który para mogłaby wprowadzić w nowym roku, aby poprawić swoje finanse (np. "Spróbujcie 'zasady 24 godzin' dla zakupów impulsywnych powyżej 200 zł" albo "Ustawcie automatyczny przelew na konto oszczędnościowe dzień po wypłacie").
+    
+    Zakończ raport motywującym i pozytywnym akcentem.
+    """
+
+    try:
+        response = model.generate_content(prompt)
+        return response.text.strip()
+    except Exception as e:
+        print(f"Błąd Gemini (podsumowanie roczne): {e}")
+        return "### Błąd Generowania Raportu\n\nNie udało się wygenerować rocznego podsumowania z powodu błędu. Spróbuj ponownie później."
