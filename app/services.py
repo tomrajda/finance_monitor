@@ -53,28 +53,55 @@ def suggest_category_gemini(description: str) -> tuple[str, bool]:
 def get_monthly_summary_gemini(month_name: str, year: int, income_total: float, expenses_total: float, savings: float, expenses_by_category: dict) -> str:
     """Generuje podsumowanie miesiąca i porady finansowe używając Gemini."""
     
+    # Oblicz stopę oszczędności jako procent przychodów
+    savings_rate = (savings / income_total * 100) if income_total > 0 else 0
+    
+    # Przygotuj listę wydatków
     expenses_str = "\n".join([f"- {cat}: {amount:.2f} PLN" for cat, amount in expenses_by_category.items()])
 
+    # --- NOWY, ROZBUDOWANY PROMPT ---
     prompt = f"""
-    Jesteś doradcą finansowym. Przeanalizuj następujące dane finansowe za {month_name} {year} w języku polskim:
-    Przychody łączne: {income_total:.2f} PLN
-    Wydatki łączne: {expenses_total:.2f} PLN
-    Oszczędności (Przychody - Wydatki): {savings:.2f} PLN
+    Jesteś doświadczonym, empatycznym doradcą finansowym z Polski. Twoim zadaniem jest analiza miesięcznego budżetu pary i przedstawienie go w sposób ciekawy, motywujący i osadzony w polskich realiach.
+    
+    Oto dane finansowe pary za {month_name} {year}:
+    - Przychody łączne: {income_total:.2f} PLN
+    - Wydatki łączne: {expenses_total:.2f} PLN
+    - Oszczędności (Przychody - Wydatki): {savings:.2f} PLN
+    - Stopa oszczędności: {savings_rate:.1f}% przychodów
 
-    Wydatki według kategorii:
+    Oto rozkład ich wydatków według kategorii:
     {expenses_str if expenses_str else "- Brak wydatków w tym miesiącu."}
+    
+    Wykonaj następujące zadania w języku polskim, używając przyjaznego i wspierającego tonu. Używaj formatowania Markdown (nagłówki, pogrubienia, listy), aby odpowiedź była czytelna.
 
-    Zadania:
-    1. Napisz krótkie, przyjazne podsumowanie sytuacji finansowej w tym miesiącu (2-3 zdania).
-    2. Przedstaw 2-3 konkretne, praktyczne porady finansowe lub obserwacje na podstawie tych danych.
-       - Jeśli oszczędności są dobre, pochwal i zasugeruj, jak utrzymać ten stan lub co można zrobić z nadwyżką.
-       - Jeśli wydatki w jakiejś kategorii są wysokie, delikatnie na to zwróć uwagę i zaproponuj refleksję lub optymalizację.
-       - Jeśli oszczędności są niskie lub ujemne, zaproponuj kroki zaradcze.
-    3. Używaj języka polskiego. Bądź motywujący i wspierający.
+    **Zadanie 1: Tytuł i Krótkie Podsumowanie**
+    Stwórz chwytliwy, pozytywny tytuł dla tego miesiąca, np. "Świetny Miesiąc Oszczędzania!" albo "Inwestycja w Siebie!".
+    Następnie, w 2-3 zdaniach, podsumuj ogólną kondycję finansową pary w tym miesiącu. Skup się na relacji między przychodami a wydatkami.
+
+    **Zadanie 2: Analiza w Kontekście Polskich Realiów**
+    Porównaj ich stopę oszczędności z ogólnymi zaleceniami i statystykami dla Polski.
+    - Wspomnij, że eksperci finansowi często zalecają oszczędzanie 10-20% miesięcznych dochodów.
+    - Możesz dodać kontekst, że według różnych badań (np. Głównego Urzędu Statystycznego), stopa oszczędności gospodarstw domowych w Polsce waha się, ale osiągnięcie poziomu 10% jest już dobrym wynikiem.
+    - Skomentuj, jak para wypada na tym tle. Jeśli ich wynik jest świetny, pochwal ich. Jeśli jest niski, zmotywuj do poprawy, bez krytykowania.
+
+    **Zadanie 3: Analiza Kategorii Wydatków**
+    Przeanalizuj listę wydatków. Zidentyfikuj jedną lub dwie kategorie, które wyróżniają się najbardziej (pozytywnie lub negatywnie).
+    - Jeśli jakaś kategoria, np. "Rozrywka" lub "Jedzenie", stanowi duży procent wydatków, delikatnie na to zwróć uwagę. Zaproponuj refleksję, np. "Warto zauważyć, że wydatki na [kategoria] były w tym miesiącu znaczące. Czy przyniosły Wam dużo radości i były tego warte?".
+    - Jeśli wydatki na "życie" (np. "Living", "Rachunki") są wysokie, możesz to skomentować jako stały, ważny element budżetu.
+    - Nie krytykuj, ale zachęcaj do świadomego wydawania pieniędzy.
+
+    **Zadanie 4: Konkretne i Kreatywne Porady**
+    Daj 2-3 konkretne, praktyczne i lekko kreatywne porady na przyszłość, dopasowane do ich sytuacji.
+    - Jeśli mają nadwyżkę: "Świetna robota! Zastanówcie się, co zrobić z tą nadwyżką. Może to dobry moment na nadpłatę małego kredytu, zasilenie 'poduszki finansowej' lub zainwestowanie małej kwoty w [coś, co pasuje do ich wydatków, np. kurs, jeśli wydają na edukację]?"
+    - Jeśli mają deficyt lub niskie oszczędności: "Każdy ma czasem trudniejszy miesiąc. Może w przyszłym miesiącu spróbujecie wyzwania 'tydzień bez wydatków na jedzenie na mieście' albo przeanalizujecie subskrypcje, z których rzadko korzystacie? Małe kroki potrafią zdziałać cuda!"
+    - Zawsze zakończ pozytywnym, motywującym akcentem.
     """
+    # --- KONIEC PROMPTU ---
+
     try:
         response = model.generate_content(prompt)
         return response.text.strip()
     except Exception as e:
         print(f"Błąd Gemini (podsumowanie): {e}")
-        return "Nie udało się wygenerować podsumowania z powodu błędu."
+        return "### Błąd Generowania Podsumowania\n\nNie udało się wygenerować podsumowania z powodu błędu. Spróbuj ponownie później."
+    

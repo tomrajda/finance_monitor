@@ -2,6 +2,7 @@
 
 {% block content %}
 <style>
+    /* Styl do centrowania canvasu wewnątrz kontenera */
     .chart-container {
         display: flex;
         justify-content: center;
@@ -12,7 +13,7 @@
 
 <div class="row mb-3 align-items-center">
     <div class="col-md-8">
-        <h2>Podsumowanie Roku - {{ selected_year }}</h2>
+        <h2>r.bilans</h2>
     </div>
     <div class="col-md-4">
         <form method="GET" action="{{ url_for('main.yearly_summary') }}" class="form-inline float-md-right">
@@ -29,14 +30,44 @@
 </div>
 
 <div class="row">
+    <div class="col-md-4">
+        <div class="card text-white bg-success mb-3">
+            <div class="card-header">Przychody</div>
+            <div class="card-body text-center">
+                <h3 class="card-title display-4">{{ "%.2f"|format(total_income_ytd) }}</h3>
+                <p class="card-text">PLN</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card text-white bg-danger mb-3">
+            <div class="card-header">Wydatki</div>
+            <div class="card-body text-center">
+                <h3 class="card-title display-4">{{ "%.2f"|format(total_expenses_ytd) }}</h3>
+                <p class="card-text">PLN</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card text-white {% if total_savings_ytd >= 0 %}bg-info{% else %}bg-warning{% endif %} mb-3">
+            <div class="card-header">Oszczędności</div>
+            <div class="card-body text-center">
+                <h3 class="card-title display-4">{{ "%.2f"|format(total_savings_ytd) }}</h3>
+                <p class="card-text">PLN</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
     <div class="col-12">
         <div class="card">
             <div class="card-header text-center">
-                <h4>Łączny Rozkład Wydatków T&M w {{ selected_year }}</h4>
+                <h4>Rozkład wydatków</h4>
             </div>
-            <div class="card-body chart-container" style="height: 500px;">
-                {% if expenses_ytd_dict %}
-                    <div id="yearlyExpensesContainer" data-chartdata='{{ expenses_ytd_dict|tojson|safe }}' style="height: 100%; width: 100%;">
+            <div class="card-body chart-container" style="height: 600px;"> 
+                {% if expenses_ytd_chart_data.labels %}
+                    <div id="yearlyExpensesContainer" data-chartdata='{{ expenses_ytd_chart_data|tojson|safe }}' style="height: 100%; width: 100%;">
                         <canvas id="yearlyExpensesChart"></canvas>
                     </div>
                 {% else %}
@@ -52,48 +83,25 @@
 {{ super() }}
 <script>
 window.addEventListener('load', function () {
-    // Rejestracja pluginów tylko dla tej strony
+    // Rejestracja pluginu do etykiet na wykresie
     if (typeof ChartDataLabels !== 'undefined') {
         Chart.register(ChartDataLabels);
     }
-    const centerTextPlugin = {
-      id: 'centerTextYearly', // Unikalne ID, aby uniknąć konfliktów
-      afterDraw: (chart) => {
-        if (chart.config.type === 'doughnut' && chart.config.options.plugins.centerText) {
-          const { ctx, chartArea } = chart;
-          const { text, color, font } = chart.config.options.plugins.centerText;
-          if (!chartArea || chartArea.width <= 0 || chartArea.height <= 0) return;
-          ctx.save(); ctx.font = font || 'bold 1.5rem Poppins, sans-serif'; ctx.fillStyle = color || '#343a40';
-          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-          const centerX = (chartArea.left + chartArea.right) / 2;
-          const centerY = (chartArea.top + chartArea.bottom) / 2;
-          ctx.fillText(text, centerX, centerY); ctx.restore();
-        }
-      }
-    };
-    Chart.register(centerTextPlugin);
+    
+    // ZMIANA: Usunięto rejestrację pluginu centerTextPlugin, bo nie jest już potrzebny
+    // const centerTextPlugin = { ... };
+    // Chart.register(centerTextPlugin);
 
-    // Funkcje pomocnicze do kolorów (lokalne dla tego skryptu)
+    // Funkcje pomocnicze do kolorów
     const modernColorsFallback = [
         'rgba(255, 99, 132, 0.85)','rgba(54, 162, 235, 0.85)','rgba(255, 206, 86, 0.85)','rgba(75, 192, 192, 0.85)',
-        'rgba(153, 102, 255, 0.85)','rgba(255, 159, 64, 0.85)','rgba(76, 175, 80, 0.85)','rgba(201, 203, 207, 0.85)',
-        'rgba(230, 126, 34, 0.85)','rgba(46, 204, 113, 0.85)','rgba(142, 68, 173, 0.85)','rgba(241, 196, 15, 0.85)'
+        'rgba(153, 102, 255, 0.85)','rgba(255, 159, 64, 0.85)','rgba(76, 175, 80, 0.85)','rgba(201, 203, 207, 0.85)'
     ];
-    let fallbackColorIndex = 0; 
-    const assignedCategoryColors = {};
-    function getCategoryColor(categoryName) {
-        if (assignedCategoryColors[categoryName]) { return assignedCategoryColors[categoryName]; }
-        const color = modernColorsFallback[fallbackColorIndex % modernColorsFallback.length];
-        assignedCategoryColors[categoryName] = color; 
-        fallbackColorIndex++;
+    let colorIndex = 0;
+    function getColor() {
+        const color = modernColorsFallback[colorIndex % modernColorsFallback.length];
+        colorIndex++;
         return color;
-    }
-    function getBorderColorsFromBg(backgroundColors) {
-        return backgroundColors.map(color => {
-            const parts = color.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/);
-            if (parts) { return `rgba(${Math.max(0, parseInt(parts[1]) - 15)}, ${Math.max(0, parseInt(parts[2]) - 15)}, ${Math.max(0, parseInt(parts[3]) - 15)}, 1)`; }
-            return color.replace(/[\d.]+\)$/g, '1)'); 
-        });
     }
 
     // Kod tworzący wykres
@@ -106,13 +114,11 @@ window.addEventListener('load', function () {
         try { rawData = JSON.parse(rawDataString); } 
         catch (e) { rawData = {}; }
 
-        if (Object.keys(rawData).length > 0) {
-            const chartLabels = Object.keys(rawData);
-            const dataValues = Object.values(rawData);
-            const backgroundColors = chartLabels.map(label => getCategoryColor(label));
-            const borderColors = getBorderColorsFromBg(backgroundColors);
-            const totalValue = dataValues.reduce((sum, val) => sum + val, 0);
-            const formattedTotal = new Intl.NumberFormat('pl-PL', { style: 'currency', currency: 'PLN' }).format(totalValue);
+        if (rawData.labels && rawData.labels.length > 0) {
+            const chartLabels = rawData.labels;
+            const dataValues = rawData.data;
+            const backgroundColors = chartLabels.map(() => getColor());
+            const borderColors = backgroundColors.map(c => c.replace('0.85', '1'));
 
             new Chart(canvas, {
                 type: 'doughnut',
@@ -127,18 +133,13 @@ window.addEventListener('load', function () {
                     }]
                 },
                 options: {
-                    responsive: true, maintainAspectRatio: false,
+                    responsive: true,
+                    maintainAspectRatio: false,
                     cutout: '60%',
+                    parsing: false,
                     plugins: {
                         legend: { 
-                            display: true, // Włączamy legendę dla tego wykresu
-                            position: 'bottom',
-                            labels: {
-                                font: { family: 'Poppins', size: 12 },
-                                padding: 20,
-                                boxWidth: 15,
-                                usePointStyle: true
-                            }
+                            display: false
                         },
                         tooltip: {
                             callbacks: {
@@ -154,20 +155,19 @@ window.addEventListener('load', function () {
                                 }
                             }
                         },
+                        // ZMIANA: Przywrócono pełną konfigurację datalabels
                         datalabels: {
                             formatter: (value, context) => {
                                 const total = context.chart.data.datasets[0].data.reduce((sum, val) => sum + val, 0);
                                 const percentage = (value / total * 100);
-                                return percentage > 3 ? percentage.toFixed(0) + '%' : '';
+                                return percentage > 1.5 ? percentage.toFixed(1) + '%' : '';
                             },
                             color: '#fff',
-                            font: { weight: 'bold', family: 'Poppins' },
+                            font: { weight: 'bold', family: 'Poppins', size: 11 },
                             textStrokeColor: 'rgba(0,0,0,0.5)',
                             textStrokeWidth: 2
-                        },
-                        centerText: {
-                            text: formattedTotal
                         }
+                        // ZMIANA: Usunięto obiekt 'centerText'
                     }
                 }
             });

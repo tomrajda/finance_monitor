@@ -108,3 +108,4 @@ class PortfolioSnapshot(db.Model):
 
     def __repr__(self):
         return f'<PortfolioSnapshot PortfolioID: {self.portfolio_id} - Time: {self.timestamp} - Value: {self.total_value} {self.currency}>'
+

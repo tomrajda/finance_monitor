@@ -3,7 +3,7 @@
 from flask import render_template, request, redirect, url_for, flash, jsonify, current_app, Blueprint
 from app import db
 from app.services import suggest_category_gemini, get_monthly_summary_gemini
-
+# Upewnij się, że wszystkie modele są importowane
 from app.models import Transaction, Category, Account, Portfolio, AssetCategory, Asset, AssetValueHistory, PortfolioSnapshot
 from datetime import datetime, date, timedelta 
 from sqlalchemy import extract, func, and_ # func i desc mogą być potrzebne
@@ -186,32 +186,50 @@ def index():
 def yearly_summary():
     today = date.today()
     
-    # Krok 1: Pobierz listę lat z danymi do filtra
     years_with_data_query = db.session.query(extract('year', Transaction.date)).distinct().all()
     years_with_data = sorted([r[0] for r in years_with_data_query if r[0] is not None], reverse=True)
     
     if not years_with_data:
         years_with_data = [today.year]
 
-    # Krok 2: Ustal wybrany rok (domyślnie najnowszy)
     selected_year = request.args.get('year', default=years_with_data[0], type=int)
 
-    # Krok 3: Pobierz zagregowane dane o wydatkach dla tego roku
+    # Obliczenia danych rocznych (Przychody, Wydatki, Oszczędności)
+    total_income_ytd = db.session.query(func.sum(Transaction.amount)).filter(
+        Transaction.is_income == True, 
+        extract('year', Transaction.date) == selected_year
+    ).scalar() or 0.0
+    
+    total_expenses_ytd = db.session.query(func.sum(Transaction.amount)).filter(
+        Transaction.is_income == False, 
+        extract('year', Transaction.date) == selected_year
+    ).scalar() or 0.0
+    
+    total_savings_ytd = total_income_ytd - total_expenses_ytd
+
+    # Dane dla wykresu
     expenses_ytd_q = db.session.query(
         Category.name, 
         func.sum(Transaction.amount)
     ).join(Category).filter(
         Transaction.is_income == False, 
         extract('year', Transaction.date) == selected_year
-    ).group_by(Category.name).order_by(func.sum(Transaction.amount).desc()).all()
+    ).group_by(Category.name).order_by(func.sum(Transaction.amount).desc()).all() # Sortowanie malejąco
     
-    # Krok 4: Przygotuj dane dla wykresu (posortowany słownik)
-    expenses_ytd_dict = {cat: amount for cat, amount in expenses_ytd_q}
+    # ZMIANA: Przygotuj dane jako dwie osobne, posortowane listy
+    expenses_ytd_chart_data = {
+        "labels": [item[0] for item in expenses_ytd_q],
+        "data": [item[1] for item in expenses_ytd_q]
+    }
 
     return render_template('yearly_summary.html',
                            selected_year=selected_year,
                            years_with_data=years_with_data,
-                           expenses_ytd_dict=expenses_ytd_dict
+                           total_income_ytd=total_income_ytd,
+                           total_expenses_ytd=total_expenses_ytd,
+                           total_savings_ytd=total_savings_ytd,
+                           # Przekazujemy nową, posortowaną strukturę danych
+                           expenses_ytd_chart_data=expenses_ytd_chart_data
                            )
 
 # --- NOWA TRASA API DLA PODSUMOWANIA GEMINI ---
