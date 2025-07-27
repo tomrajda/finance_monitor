@@ -1,0 +1,178 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<style>
+    .chart-container {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        position: relative;
+    }
+</style>
+
+<div class="row mb-3 align-items-center">
+    <div class="col-md-8">
+        <h2>Podsumowanie Roku - {{ selected_year }}</h2>
+    </div>
+    <div class="col-md-4">
+        <form method="GET" action="{{ url_for('main.yearly_summary') }}" class="form-inline float-md-right">
+            <div class="form-group mr-2 mb-2 mb-md-0">
+                <label for="year_select" class="mr-2">Wybierz rok:</label>
+                <select name="year" id="year_select" class="form-control form-control-sm" onchange="this.form.submit()">
+                    {% for year_val in years_with_data %}
+                    <option value="{{ year_val }}" {% if year_val == selected_year %}selected{% endif %}>{{ year_val }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header text-center">
+                <h4>Łączny Rozkład Wydatków T&M w {{ selected_year }}</h4>
+            </div>
+            <div class="card-body chart-container" style="height: 500px;">
+                {% if expenses_ytd_dict %}
+                    <div id="yearlyExpensesContainer" data-chartdata='{{ expenses_ytd_dict|tojson|safe }}' style="height: 100%; width: 100%;">
+                        <canvas id="yearlyExpensesChart"></canvas>
+                    </div>
+                {% else %}
+                    <p class="text-muted text-center mt-3">Brak wydatków w wybranym roku.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+window.addEventListener('load', function () {
+    // Rejestracja pluginów tylko dla tej strony
+    if (typeof ChartDataLabels !== 'undefined') {
+        Chart.register(ChartDataLabels);
+    }
+    const centerTextPlugin = {
+      id: 'centerTextYearly', // Unikalne ID, aby uniknąć konfliktów
+      afterDraw: (chart) => {
+        if (chart.config.type === 'doughnut' && chart.config.options.plugins.centerText) {
+          const { ctx, chartArea } = chart;
+          const { text, color, font } = chart.config.options.plugins.centerText;
+          if (!chartArea || chartArea.width <= 0 || chartArea.height <= 0) return;
+          ctx.save(); ctx.font = font || 'bold 1.5rem Poppins, sans-serif'; ctx.fillStyle = color || '#343a40';
+          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          const centerX = (chartArea.left + chartArea.right) / 2;
+          const centerY = (chartArea.top + chartArea.bottom) / 2;
+          ctx.fillText(text, centerX, centerY); ctx.restore();
+        }
+      }
+    };
+    Chart.register(centerTextPlugin);
+
+    // Funkcje pomocnicze do kolorów (lokalne dla tego skryptu)
+    const modernColorsFallback = [
+        'rgba(255, 99, 132, 0.85)','rgba(54, 162, 235, 0.85)','rgba(255, 206, 86, 0.85)','rgba(75, 192, 192, 0.85)',
+        'rgba(153, 102, 255, 0.85)','rgba(255, 159, 64, 0.85)','rgba(76, 175, 80, 0.85)','rgba(201, 203, 207, 0.85)',
+        'rgba(230, 126, 34, 0.85)','rgba(46, 204, 113, 0.85)','rgba(142, 68, 173, 0.85)','rgba(241, 196, 15, 0.85)'
+    ];
+    let fallbackColorIndex = 0; 
+    const assignedCategoryColors = {};
+    function getCategoryColor(categoryName) {
+        if (assignedCategoryColors[categoryName]) { return assignedCategoryColors[categoryName]; }
+        const color = modernColorsFallback[fallbackColorIndex % modernColorsFallback.length];
+        assignedCategoryColors[categoryName] = color; 
+        fallbackColorIndex++;
+        return color;
+    }
+    function getBorderColorsFromBg(backgroundColors) {
+        return backgroundColors.map(color => {
+            const parts = color.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/);
+            if (parts) { return `rgba(${Math.max(0, parseInt(parts[1]) - 15)}, ${Math.max(0, parseInt(parts[2]) - 15)}, ${Math.max(0, parseInt(parts[3]) - 15)}, 1)`; }
+            return color.replace(/[\d.]+\)$/g, '1)'); 
+        });
+    }
+
+    // Kod tworzący wykres
+    const dataContainer = document.getElementById('yearlyExpensesContainer');
+    const canvas = document.getElementById('yearlyExpensesChart');
+
+    if (dataContainer && canvas) {
+        let rawDataString = dataContainer.dataset.chartdata;
+        let rawData;
+        try { rawData = JSON.parse(rawDataString); } 
+        catch (e) { rawData = {}; }
+
+        if (Object.keys(rawData).length > 0) {
+            const chartLabels = Object.keys(rawData);
+            const dataValues = Object.values(rawData);
+            const backgroundColors = chartLabels.map(label => getCategoryColor(label));
+            const borderColors = getBorderColorsFromBg(backgroundColors);
+            const totalValue = dataValues.reduce((sum, val) => sum + val, 0);
+            const formattedTotal = new Intl.NumberFormat('pl-PL', { style: 'currency', currency: 'PLN' }).format(totalValue);
+
+            new Chart(canvas, {
+                type: 'doughnut',
+                data: {
+                    labels: chartLabels,
+                    datasets: [{
+                        data: dataValues,
+                        backgroundColor: backgroundColors,
+                        borderColor: borderColors,
+                        borderWidth: 2,
+                        hoverOffset: 10
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    cutout: '60%',
+                    plugins: {
+                        legend: { 
+                            display: true, // Włączamy legendę dla tego wykresu
+                            position: 'bottom',
+                            labels: {
+                                font: { family: 'Poppins', size: 12 },
+                                padding: 20,
+                                boxWidth: 15,
+                                usePointStyle: true
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.label || '';
+                                    let value = context.parsed;
+                                    if (label) { label += ': '; }
+                                    label += new Intl.NumberFormat('pl-PL', { style: 'currency', currency: 'PLN' }).format(value);
+                                    const total = context.chart.data.datasets[0].data.reduce((sum, val) => sum + val, 0);
+                                    const percentage = (value / total * 100);
+                                    label += ` (${percentage.toFixed(1)}%)`;
+                                    return label;
+                                }
+                            }
+                        },
+                        datalabels: {
+                            formatter: (value, context) => {
+                                const total = context.chart.data.datasets[0].data.reduce((sum, val) => sum + val, 0);
+                                const percentage = (value / total * 100);
+                                return percentage > 3 ? percentage.toFixed(0) + '%' : '';
+                            },
+                            color: '#fff',
+                            font: { weight: 'bold', family: 'Poppins' },
+                            textStrokeColor: 'rgba(0,0,0,0.5)',
+                            textStrokeWidth: 2
+                        },
+                        centerText: {
+                            text: formattedTotal
+                        }
+                    }
+                }
+            });
+        }
+    }
+});
+</script>
+{% endblock %}

@@ -108,12 +108,3 @@ class PortfolioSnapshot(db.Model):
 
     def __repr__(self):
         return f'<PortfolioSnapshot PortfolioID: {self.portfolio_id} - Time: {self.timestamp} - Value: {self.total_value} {self.currency}>'
-
-class SavingsGoal(db.Model):
-    year = db.Column(db.Integer, primary_key=True) # Jeden cel na rok
-    goal_total = db.Column(db.Float, nullable=True)
-    goal_tomek = db.Column(db.Float, nullable=True)
-    goal_tocka = db.Column(db.Float, nullable=True)
-
-    def __repr__(self):
-        return f'<SavingsGoal {self.year}: Total={self.goal_total}>'

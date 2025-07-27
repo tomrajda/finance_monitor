@@ -27,7 +27,7 @@
                         <a class="nav-link {% if request.endpoint == 'main.index' %}active{% endif %}" href="{{ url_for('main.index') }}">bilans</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'main.yearly_balance' %}active{% endif %}" href="{{ url_for('main.yearly_balance') }}">bilans roczny</a> <!-- NOWY LINK -->
+                        <a class="nav-link {% if request.endpoint == 'main.yearly_summary' %}active{% endif %}" href="{{ url_for('main.yearly_summary') }}">rok</a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link {% if request.endpoint.startswith('main.portfolio') %}active{% endif %}" href="{{ url_for('main.portfolio_index') }}">portfel</a>
