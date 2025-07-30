@@ -53,50 +53,45 @@ def suggest_category_gemini(description: str) -> tuple[str, bool]:
 def get_monthly_summary_gemini(month_name: str, year: int, income_total: float, expenses_total: float, savings: float, expenses_by_category: dict) -> str:
     """Generuje podsumowanie miesiąca i porady finansowe używając Gemini."""
     
-    # Oblicz stopę oszczędności jako procent przychodów
     savings_rate = (savings / income_total * 100) if income_total > 0 else 0
-    
-    # Przygotuj listę wydatków
     expenses_str = "\n".join([f"- {cat}: {amount:.2f} PLN" for cat, amount in expenses_by_category.items()])
 
-    # --- NOWY, ROZBUDOWANY PROMPT ---
     prompt = f"""
-    Jesteś doświadczonym, empatycznym doradcą finansowym z Polski. Twoim zadaniem jest analiza miesięcznego budżetu pary i przedstawienie go w sposób ciekawy, motywujący i osadzony w polskich realiach.
+    Jesteś doświadczonym, empatycznym analitykiem finansowym i coachem z Polski. Twoim zadaniem jest analiza miesięcznego budżetu pary T&M i przedstawienie go w sposób ciekawy, motywujący i osadzony w polskich realiach, z dużą ilością danych i ciekawostek.
     
     Oto dane finansowe pary za {month_name} {year}:
     - Przychody łączne: {income_total:.2f} PLN
     - Wydatki łączne: {expenses_total:.2f} PLN
-    - Oszczędności (Przychody - Wydatki): {savings:.2f} PLN
+    - Oszczędności: {savings:.2f} PLN
     - Stopa oszczędności: {savings_rate:.1f}% przychodów
 
     Oto rozkład ich wydatków według kategorii:
     {expenses_str if expenses_str else "- Brak wydatków w tym miesiącu."}
     
-    Wykonaj następujące zadania w języku polskim, używając przyjaznego i wspierającego tonu. Używaj formatowania Markdown (nagłówki, pogrubienia, listy), aby odpowiedź była czytelna.
+    Wykonaj następujące zadania w języku polskim, używając przyjaznego i wspierającego tonu. Używaj formatowania Markdown (nagłówki, pogrubienia, listy, cytaty blokowe dla ciekawostek).
 
-    **Zadanie 1: Tytuł i Krótkie Podsumowanie**
-    Stwórz chwytliwy, pozytywny tytuł dla tego miesiąca, np. "Świetny Miesiąc Oszczędzania!" albo "Inwestycja w Siebie!".
-    Następnie, w 2-3 zdaniach, podsumuj ogólną kondycję finansową pary w tym miesiącu. Skup się na relacji między przychodami a wydatkami.
+    **Zadanie 1: Tytuł i Kluczowe Wskaźniki**
+    Stwórz chwytliwy, pozytywny tytuł dla tego miesiąca, np. "Finansowy Sprint w {month_name}!" albo "Miesiąc Mądrych Decyzji!".
+    Następnie, w 2-3 zdaniach, podsumuj ogólną kondycję finansową. Podkreśl najważniejszą liczbę miesiąca – kwotę oszczędności lub stopę oszczędności.
 
-    **Zadanie 2: Analiza w Kontekście Polskich Realiów**
-    Porównaj ich stopę oszczędności z ogólnymi zaleceniami i statystykami dla Polski.
-    - Wspomnij, że eksperci finansowi często zalecają oszczędzanie 10-20% miesięcznych dochodów.
-    - Możesz dodać kontekst, że według różnych badań (np. Głównego Urzędu Statystycznego), stopa oszczędności gospodarstw domowych w Polsce waha się, ale osiągnięcie poziomu 10% jest już dobrym wynikiem.
-    - Skomentuj, jak para wypada na tym tle. Jeśli ich wynik jest świetny, pochwal ich. Jeśli jest niski, zmotywuj do poprawy, bez krytykowania.
+    **Zadanie 2: Analiza Stopy Oszczędności w Kontekście**
+    Szczegółowo przeanalizuj ich stopę oszczędności ({savings_rate:.1f}%).
+    - Porównaj ją z ogólnymi zaleceniami dla Polski (10-20% dochodów).
+    - **Dodaj ciekawostkę statystyczną:** Wspomnij o danych, np. "Według danych GUS/Eurostat, stopa oszczędności gospodarstw domowych w Polsce w ostatnich latach oscylowała w okolicach 5-10%. Wasz wynik ({savings_rate:.1f}%) plasuje Was [znacznie powyżej/blisko/poniżej] średniej krajowej. To świetny punkt odniesienia!".
+    - Podkreśl, co oznacza ich wynik w praktyce. Oblicz, ile mogliby zaoszczędzić w ciągu roku, utrzymując ten poziom: ({savings:.2f} PLN * 12 miesięcy = {savings * 12:.2f} PLN).
 
-    **Zadanie 3: Analiza Kategorii Wydatków**
-    Przeanalizuj listę wydatków. Zidentyfikuj jedną lub dwie kategorie, które wyróżniają się najbardziej (pozytywnie lub negatywnie).
-    - Jeśli jakaś kategoria, np. "Rozrywka" lub "Jedzenie", stanowi duży procent wydatków, delikatnie na to zwróć uwagę. Zaproponuj refleksję, np. "Warto zauważyć, że wydatki na [kategoria] były w tym miesiącu znaczące. Czy przyniosły Wam dużo radości i były tego warte?".
-    - Jeśli wydatki na "życie" (np. "Living", "Rachunki") są wysokie, możesz to skomentować jako stały, ważny element budżetu.
-    - Nie krytykuj, ale zachęcaj do świadomego wydawania pieniędzy.
+    **Zadanie 3: Głębsza Analiza Wydatków**
+    Zidentyfikuj 2-3 najważniejsze kategorie wydatków i skomentuj je, podając konkretne liczby i procenty.
+    - Oblicz, jaki procent **wszystkich wydatków** stanowiły 1-2 największe kategorie. Np. "Warto zauważyć, że wydatki na [kategoria 1] ({expenses_by_category.get('Kategoria 1', 0):.2f} PLN) stanowiły aż { (expenses_by_category.get('Kategoria 1', 0) / expenses_total * 100) if expenses_total > 0 else 0:.0f}% Waszych miesięcznych kosztów."
+    - **Dodaj ciekawostkę finansową:** Jeśli największą kategorią jest "Jedzenie", możesz dodać: "> **Ciekawostka:** Przeciętne polskie gospodarstwo domowe wydaje na żywność i napoje bezalkoholowe około 25-30% swojego budżetu. Jak Wasze wydatki w tej kategorii mają się do tej średniej?". Jeśli "Transport", wspomnij o rosnących cenach paliw. Jeśli "Rozrywka", pochwal za inwestowanie w dobre samopoczucie.
 
-    **Zadanie 4: Konkretne i Kreatywne Porady**
-    Daj 2-3 konkretne, praktyczne i lekko kreatywne porady na przyszłość, dopasowane do ich sytuacji.
-    - Jeśli mają nadwyżkę: "Świetna robota! Zastanówcie się, co zrobić z tą nadwyżką. Może to dobry moment na nadpłatę małego kredytu, zasilenie 'poduszki finansowej' lub zainwestowanie małej kwoty w [coś, co pasuje do ich wydatków, np. kurs, jeśli wydają na edukację]?"
-    - Jeśli mają deficyt lub niskie oszczędności: "Każdy ma czasem trudniejszy miesiąc. Może w przyszłym miesiącu spróbujecie wyzwania 'tydzień bez wydatków na jedzenie na mieście' albo przeanalizujecie subskrypcje, z których rzadko korzystacie? Małe kroki potrafią zdziałać cuda!"
-    - Zawsze zakończ pozytywnym, motywującym akcentem.
+    **Zadanie 4: Konkretne, "Numbryczne" Porady**
+    Daj 2 praktyczne porady oparte na liczbach.
+    - Jeśli oszczędności są dobre: "Świetna robota! Wasze {savings:.2f} PLN to solidny wkład. Proponuję strategię '50/30/20', gdzie 50% idzie na potrzeby, 30% na przyjemności, a 20% na oszczędności i inwestycje. Wasz wynik jest [blisko/daleko] od tego modelu. Może warto [coś zrobić], aby się do niego zbliżyć?".
+    - Jeśli oszczędności są niskie: "Każdy miesiąc jest inny. Spróbujcie w przyszłym miesiącu 'zasady 1%'. Polega ona na próbie zmniejszenia wydatków w jednej dużej kategorii (np. Jedzenie) tylko o 1%, co dałoby Wam dodatkowe {expenses_by_category.get('Jedzenie', 0) * 0.01:.2f} PLN oszczędności. To mały krok, który buduje świetny nawyk!".
+
+    Zawsze zakończ raport pozytywnym, motywującym akcentem, podsumowując największy sukces finansowy tego miesiąca.
     """
-    # --- KONIEC PROMPTU ---
 
     try:
         response = model.generate_content(prompt)
@@ -106,55 +101,52 @@ def get_monthly_summary_gemini(month_name: str, year: int, income_total: float, 
         return "### Błąd Generowania Podsumowania\n\nNie udało się wygenerować podsumowania z powodu błędu. Spróbuj ponownie później."
     
 def get_yearly_summary_gemini(
-    selected_year: int,
-    total_income_ytd: float,
-    total_expenses_ytd: float,
-    total_savings_ytd: float,
-    avg_monthly_savings: float,
-    savings_rate_ytd: float,
-    top_categories: dict,
-    best_month: dict,
-    worst_month: dict
+    selected_year: int, total_income_ytd: float, total_expenses_ytd: float,
+    total_savings_ytd: float, avg_monthly_savings: float, savings_rate_ytd: float,
+    top_categories: dict, best_month: dict, worst_month: dict
 ) -> str:
     """Generuje roczny raport finansowy i strategiczne porady używając Gemini."""
     
-    top_categories_str = "\n".join([f"- {cat}: {amount:.2f} PLN" for cat, amount in top_categories.items()])
+    top_categories_str = "\n".join([f"- {cat}: {amount:.2f} PLN (średnio {(amount/12):.2f} PLN/mies.)" for cat, amount in top_categories.items()])
     best_month_name = best_month.get("name", "Brak danych")
     best_month_savings = best_month.get("savings", 0.0)
     worst_month_name = worst_month.get("name", "Brak danych")
     worst_month_savings = worst_month.get("savings", 0.0)
 
     prompt = f"""
-    Jesteś analitykiem finansowym i coachem specjalizującym się w długoterminowych strategiach dla par. Twoim zadaniem jest stworzenie rocznego raportu finansowego dla pary T&M na podstawie poniższych danych za rok {selected_year}. Używaj języka polskiego, formatowania Markdown (nagłówki, pogrubienia, listy), a ton ma być profesjonalny, ale jednocześnie motywujący i optymistyczny.
+    Jesteś czołowym analitykiem finansowym i coachem specjalizującym się w długoterminowych strategiach dla par. Twoim zadaniem jest stworzenie kompleksowego, rocznego raportu finansowego dla pary T&M na podstawie poniższych danych za rok {selected_year}. Używaj języka polskiego, formatowania Markdown (nagłówki, pogrubienia, listy, cytaty), a ton ma być profesjonalny, ale jednocześnie motywujący i pełen ciekawych spostrzeżeń.
 
-    **Dane Roczne:**
-    - Całkowity przychód: {total_income_ytd:.2f} PLN
-    - Całkowite wydatki: {total_expenses_ytd:.2f} PLN
-    - Całkowite oszczędności: {total_savings_ytd:.2f} PLN
+    **Dane Roczne T&M za {selected_year}:**
+    - Całkowity przychód roczny: {total_income_ytd:.2f} PLN
+    - Całkowite wydatki roczne: {total_expenses_ytd:.2f} PLN
+    - **Całkowite oszczędności roczne: {total_savings_ytd:.2f} PLN**
     - Średnie miesięczne oszczędności: {avg_monthly_savings:.2f} PLN
-    - Roczna stopa oszczędności: {savings_rate_ytd:.1f}%
+    - **Roczna stopa oszczędności: {savings_rate_ytd:.1f}%**
 
     **Kluczowe obserwacje:**
-    - Kategorie z największymi wydatkami w roku:
+    - Kategorie z największymi wydatkami w roku (i średnia miesięczna):
     {top_categories_str}
     - Najlepszy miesiąc pod względem oszczędności: {best_month_name} ({best_month_savings:.2f} PLN)
     - Najtrudniejszy miesiąc pod względem oszczędności: {worst_month_name} ({worst_month_savings:.2f} PLN)
 
-    **Zadania do wykonania:**
+    **Zadania do wykonania w raporcie:**
 
-    1.  **Tytuł Raportu:** Stwórz inspirujący tytuł, np. "Wasz Finansowy Rok {selected_year}: Analiza i Krok w Przyszłość".
+    1.  **Tytuł Raportu:** Stwórz inspirujący tytuł, np. "**Wasz Finansowy Rok {selected_year}: Analiza, Osiągnięcia i Mapa Drogowa na Przyszłość**".
 
-    2.  **Podsumowanie Ogólne ("Executive Summary"):** W 2-3 zdaniach podsumuj, jaki to był rok dla finansów pary. Skup się na kluczowej metryce – rocznej stopie oszczędności, porównując ją do zalecanych w Polsce 10-20%.
+    2.  **Podsumowanie Ogólne ("Executive Summary"):**
+        W 2-3 zdaniach podsumuj rok. Skup się na kluczowej metryce – rocznej stopie oszczędności. Porównaj ją z zalecanymi w Polsce 10-20% i skomentuj wynik.
+        **Dodaj ciekawostkę:** "> **Kontekst:** Osiągnięcie rocznej stopy oszczędności na poziomie {savings_rate_ytd:.1f}% oznacza, że efektywnie pracowaliście 'na siebie' przez około {(savings_rate_ytd / 100 * 12):.1f} miesiąca w roku! Każdy punkt procentowy to dodatkowe dni wolności finansowej."
 
-    3.  **Głęboka Analiza ("Deep Dive"):**
-        *   **Nawyki Wydatkowe:** Skomentuj top 3 kategorie. Czy są one zgodne z celami i wartościami pary (np. "Duże wydatki na 'Podróże' pokazują, że cenicie sobie wspólne doświadczenia")? Czy któraś kategoria jest zaskoczeniem?
-        *   **Zmienność w Czasie:** Porównaj najlepszy i najtrudniejszy miesiąc. Co mogło być przyczyną różnic? (np. "Widać, że {best_month_name} był świetny – być może to efekt premii lub niższych wydatków. Z kolei w {worst_month_name} mogły pojawić się nieplanowane koszty.").
+    3.  **Głęboka Analiza Roczna ("Deep Dive"):**
+        *   **Struktura Wydatków:** Skomentuj top 3 kategorie. Oblicz, jaki procent **całkowitych rocznych wydatków** stanowi suma tych trzech kategorii. Np. "Wasze top 3 kategorie pochłonęły łącznie [suma] PLN, co stanowi [procent]% wszystkich rocznych kosztów. To pokazuje, co jest dla Was priorytetem."
+        *   **Zmienność i Stabilność:** Porównaj najlepszy i najtrudniejszy miesiąc. Różnica w oszczędnościach między nimi wyniosła **{best_month_savings - worst_month_savings:.2f} PLN**. Co to mówi o stabilności Waszych finansów? Czy były to jednorazowe zdarzenia (premie, duże zakupy), czy powtarzalny schemat?
+        *   **Siła Procentu Składanego:** Oblicz, co by się stało z Waszymi rocznymi oszczędnościami ({total_savings_ytd:.2f} PLN) po 10 latach, zakładając skromne, średnie oprocentowanie 7% rocznie (uwzględniając procent składany). Użyj wzoru: Kwota * (1 + 0.07)^10. Podaj wynik jako inspirującą liczbę. Np. "> **Potęga Czasu:** Gdybyście zainwestowali tegoroczne oszczędności, przy średnim rocznym zwrocie 7%, po 10 latach ta kwota urosłaby do około **{(total_savings_ytd * (1.07**10)):.2f} PLN**! To pokazuje, jak potężny jest procent składany."
 
-    4.  **Strategiczne Rekomendacje na Następny Rok:**
-        *   **Cel na {selected_year + 1}:** Bazując na średnich miesięcznych oszczędnościach, zaproponuj realistyczny, ale ambitny cel oszczędnościowy na kolejny rok.
-        *   **"Jedna Zmiana":** Zaproponuj jedną, konkretną zmianę lub nawyk, który para mogłaby wprowadzić w nowym roku, aby poprawić swoje finanse (np. "Spróbujcie 'zasady 24 godzin' dla zakupów impulsywnych powyżej 200 zł" albo "Ustawcie automatyczny przelew na konto oszczędnościowe dzień po wypłacie").
-    
-    Zakończ raport motywującym i pozytywnym akcentem.
+    4.  **Strategiczne Rekomendacje na {selected_year + 1}:**
+        *   **Cel Oszczędnościowy SMART:** Bazując na średnich miesięcznych oszczędnościach, zaproponuj konkretny cel roczny. Np. "Jeśli uda Wam się zwiększyć średnie miesięczne oszczędności o zaledwie 10% (do {(avg_monthly_savings * 1.1):.2f} PLN), w przyszłym roku zaoszczędzicie łącznie **{(avg_monthly_savings * 1.1 * 12):.2f} PLN**."
+        *   **"Audyt Kategorii":** Zaproponuj, aby w nowym roku przyjrzeli się jednej kategorii z top 3 wydatków i spróbowali zoptymalizować ją o 5-10%, nie rezygnując z jakości życia. Oblicz, ile dałoby to dodatkowych oszczędności w skali roku.
+
+    Zakończ raport gratulacjami za podjęty wysiłek i motywującym akcentem na przyszłość.
     """
 
     try:
