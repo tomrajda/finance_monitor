@@ -1,6 +1,9 @@
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
 @import url("https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css");
 
+/* --- ZMIENNE KOLORÓW --- */
+
+/* Domyślny tryb jasny */
 :root {
     --primary-color: #343a40;
     --primary-color-light: #9b59b6;
@@ -17,7 +20,21 @@
     --border-radius-lg: 1rem;
     --border-radius-md: 0.5rem;
     --box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.1);
+    --body-gradient: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
 }
+
+/* Definicja kolorów dla trybu ciemnego */
+body.dark-mode {
+    --light-bg: #1a1a2e;
+    --card-bg: rgba(255, 255, 255, 0.05);
+    --card-border: rgba(255, 255, 255, 0.1);
+    --text-color: #e8e8e8; /* Jaśniejszy tekst */
+    --text-muted: #a0a0a0; /* Jaśniejszy "muted" tekst */
+    --primary-color: #f5f5f5;
+    --box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.2);
+    --body-gradient: linear-gradient(135deg, #16222A 0%, #3A6073 100%);
+}
+
 
 body {
     font-family: 'Poppins', sans-serif;
@@ -25,18 +42,20 @@ body {
     color: var(--text-color);
     line-height: 1.6;
     font-size: 16px;
-    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+    background: var(--body-gradient);
     background-attachment: fixed;
+    transition: background-color 0.4s ease, color 0.4s ease;
 }
 
 /* --- Navbar --- */
 .navbar {
-    background: rgba(255, 255, 255, 0.6);
+    background: var(--card-bg);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+    border-bottom: 1px solid var(--card-border);
     padding: 0.8rem 0;
+    transition: background-color 0.4s ease, border-color 0.4s ease;
 }
 .navbar-brand {
     font-weight: 700;
@@ -45,7 +64,7 @@ body {
     transition: color 0.3s ease;
 }
 .navbar-brand:hover {
-    color: var(--primary-color) !important;
+    color: var(--secondary-color) !important;
 }
 .navbar-nav .nav-link {
     font-weight: 500;
@@ -54,18 +73,22 @@ body {
     padding: 0.5rem 1rem;
     border-radius: var(--border-radius-md);
 }
-/* ZMIANA: Ciemniejszy i bardziej wyrazisty hover */
 .navbar-nav .nav-link:hover {
-    background-color: rgba(0, 0, 0, 0.08); /* Ciemniejszy szary */
-    color: var(--primary-color) !important; /* Kolor ikony/tekstu po najechaniu */
+    background-color: rgba(0, 0, 0, 0.08);
+    color: var(--primary-color) !important;
+}
+body.dark-mode .navbar-nav .nav-link:hover {
+    background-color: rgba(255, 255, 255, 0.1);
 }
 .navbar-nav .nav-link.active {
-    background-color: #e9ecef;
+    background-color: rgba(0, 0, 0, 0.05);
     color: var(--text-color) !important;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
+body.dark-mode .navbar-nav .nav-link.active {
+    background-color: rgba(255, 255, 255, 0.08);
+}
 .navbar-nav .nav-link .bi {
-    /* ZMIANA: Znacznie większe ikony */
     font-size: 1.8rem; 
     vertical-align: middle;
 }
@@ -79,11 +102,14 @@ body {
     border-radius: var(--border-radius-lg);
     box-shadow: var(--box-shadow);
     margin-bottom: 1.5rem;
-    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    transition: transform 0.3s ease, box-shadow 0.3s ease, background-color 0.4s ease, border-color 0.4s ease;
 }
 .card:hover {
     transform: translateY(-5px);
     box-shadow: 0 12px 36px 0 rgba(31, 38, 135, 0.15);
+}
+body.dark-mode .card:hover {
+    box-shadow: 0 12px 36px 0 rgba(0, 0, 0, 0.3);
 }
 .card-header {
     background-color: transparent;
@@ -91,10 +117,18 @@ body {
     font-weight: 600;
     font-size: 1.1rem;
     padding: 1rem 1.5rem;
+    transition: border-color 0.4s ease;
 }
-.card.text-white .card-body h3.display-4 {
+.card.text-white .card-body h3.display-4 { color: #fff !important; }
+body.dark-mode .card.bg-success { background-color: var(--success) !important; }
+body.dark-mode .card.bg-danger { background-color: var(--danger) !important; }
+body.dark-mode .card.bg-info { background-color: var(--info) !important; }
+body.dark-mode .card.bg-warning { background-color: var(--warning) !important; color: var(--dark-text) !important; }
+/* NOWOŚĆ: Nadpisanie kolorów tekstu dla kolorowych kart w dark mode */
+body.dark-mode .card.bg-success .card-header, body.dark-mode .card.bg-danger .card-header, body.dark-mode .card.bg-info .card-header {
     color: #fff !important;
 }
+
 
 /* --- Wykresy --- */
 .chart-container {
@@ -104,10 +138,7 @@ body {
     position: relative;
     padding: 1.5rem;
 }
-.chart-container canvas {
-    max-width: 100%;
-    max-height: 100%;
-}
+.chart-container canvas { max-width: 100%; max-height: 100%; }
 
 /* --- Forms --- */
 .form-control, .btn {
@@ -115,59 +146,64 @@ body {
     transition: all 0.3s ease;
 }
 .form-control:focus {
-    border-color: var(--primary-color);
-    box-shadow: 0 0 0 0.2rem rgba(106, 17, 203, 0.25);
+    border-color: var(--secondary-color);
+    box-shadow: 0 0 0 0.2rem rgba(37, 117, 252, 0.25);
 }
-.btn-primary {
-    background-color: #007bff;
-    border-color: #007bff;
-    color: white;
+body.dark-mode .form-control {
+    background-color: rgba(255, 255, 255, 0.05);
+    color: var(--text-color);
+    border-color: var(--card-border);
 }
-.btn-primary:hover {
-    background-color: #0069d9;
-    border-color: #0062cc;
+body.dark-mode .form-control:focus {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+select.form-control {
+    -webkit-appearance: none; -moz-appearance: none; appearance: none;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%236c757d' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    background-size: 16px 12px;
+}
+body.dark-mode select.form-control {
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23adb5bd' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e");
 }
 
-/* --- NOWA ANIMACJA DLA PRZYCISKU AI --- */
+/* --- Buttons --- */
+.btn-primary {
+    background-color: var(--secondary-color);
+    border-color: var(--secondary-color);
+    color: white;
+}
+.btn-primary:hover { filter: brightness(110%); }
+
 @keyframes gradient-animation {
     0% { background-position: 0% 50%; }
     50% { background-position: 100% 50%; }
     100% { background-position: 0% 50%; }
 }
-
-/* ZMIANA: Przycisk AI z animowanym gradientem */
 #generateGeminiSummaryBtn {
-    /* Używamy teraz 4 kolorów dla bardziej dynamicznego efektu */
     background: linear-gradient(270deg, var(--primary-color), var(--secondary-color), var(--primary-color-light), var(--primary-color));
-    background-size: 300% 300%; /* Rozszerzamy tło, aby animacja była płynna */
+    background-size: 300% 300%;
     color: white !important;
     border: none;
     box-shadow: 0 4px 15px 0 rgba(37, 117, 252, 0.3);
-    
-    /* Dodajemy animację */
     animation: gradient-animation 8s ease infinite;
-    
     transition: all .4s ease-in-out;
 }
 #generateGeminiSummaryBtn:hover {
-    background-size: 400% 400%; /* Przybliżenie tła przy najechaniu */
+    background-size: 400% 400%;
     box-shadow: 0 6px 20px 0 rgba(37, 117, 252, 0.4);
 }
-/* Koniec zmian dla przycisku AI */
-
-
 .btn-outline-primary {
-    color: var(--primary-color);
-    border-color: var(--primary-color);
+    color: var(--secondary-color); /* Zmiana na secondary */
+    border-color: var(--secondary-color);
 }
 .btn-outline-primary:hover {
-    background-color: var(--primary-color);
+    background-color: var(--secondary-color);
     color: #fff;
-    box-shadow: 0 4px 15px 0 rgba(106, 17, 203, 0.2);
+    box-shadow: 0 4px 15px 0 rgba(37, 117, 252, 0.2);
 }
-.btn-rounded {
-    border-radius: 50px;
-}
+.btn-rounded { border-radius: 50px; }
 
 /* --- Gemini Summary --- */
 .gemini-summary {
@@ -176,33 +212,55 @@ body {
     padding: 1.5rem;
     border-radius: var(--border-radius-md);
 }
+body.dark-mode .gemini-summary {
+    background-color: rgba(20, 30, 48, 0.7);
+    border-color: rgba(54, 80, 105, 0.7);
+}
 .gemini-summary h3, .gemini-summary h4 {
-    color: var(--primary-color);
+    color: var(--secondary-color);
     margin-top: 1rem;
     margin-bottom: 0.5rem;
 }
-.gemini-summary ul {
-    padding-left: 20px;
+body.dark-mode .gemini-summary h3, body.dark-mode .gemini-summary h4 {
+    color: var(--info);
 }
+.gemini-summary ul { padding-left: 20px; }
 
-/* Nagłówki */
+/* --- Nagłówki i Tekst --- */
 h2, h3, h4, h5 {
     color: var(--text-color);
     font-weight: 600;
 }
+/* NOWOŚĆ: Nadpisanie kolorów dla klas Bootstrapa w dark mode */
+body.dark-mode .text-muted {
+    color: var(--text-muted) !important;
+}
+body.dark-mode .text-secondary {
+    color: var(--text-muted) !important; /* Secondary w Bootstrapie jest ciemny, więc użyjmy naszego muted */
+}
+body.dark-mode .border-right {
+    border-right: 1px solid var(--card-border) !important;
+}
+body.dark-mode p {
+    color: var(--text-color);
+}
 
-.btn-ai-gradient {
+/* ... (reszta stylów, które podałeś) ... */
+.btn-ai-gradient { /* Zachowuję, jeśli używasz tej klasy gdzieś indziej */
     background: linear-gradient(270deg, var(--primary-color), var(--secondary-color), var(--primary-color-light), var(--primary-color));
-    background-size: 300% 300%;
-    color: white !important; /* Upewnij się, że tekst jest biały */
-    border: none;
+    background-size: 300% 300%; color: white !important; border: none;
     box-shadow: 0 4px 15px 0 rgba(37, 117, 252, 0.3);
-    animation: gradient-animation 8s ease infinite;
-    transition: all .4s ease-in-out;
+    animation: gradient-animation 8s ease infinite; transition: all .4s ease-in-out;
 }
-.btn-ai-gradient:hover {
-    background-size: 400% 400%;
-    box-shadow: 0 6px 20px 0 rgba(37, 117, 252, 0.4);
-    color: white !important; /* Upewnij się, że tekst pozostaje biały */
-    text-decoration: none;
-}
+.btn-ai-gradient:hover { background-size: 400% 400%; box-shadow: 0 6px 20px 0 rgba(37, 117, 252, 0.4); color: white !important; text-decoration: none; }
+
+/* --- Style dla przełącznika Dark Mode --- */
+.theme-switch-wrapper { display: flex; align-items: center; }
+.theme-switch { display: inline-block; height: 24px; position: relative; width: 48px; }
+.theme-switch input { display:none; }
+.slider { background-color: #ccc; bottom: 0; cursor: pointer; left: 0; position: absolute; right: 0; top: 0; transition: .4s; }
+.slider:before { background-color: #fff; bottom: 4px; content: ""; height: 16px; left: 4px; position: absolute; transition: .4s; width: 16px; }
+input:checked + .slider { background-color: var(--secondary-color); }
+input:checked + .slider:before { transform: translateX(24px); }
+.slider.round { border-radius: 34px; }
+.slider.round:before { border-radius: 50%; }

@@ -2,7 +2,9 @@ from app import create_app
 
 app = create_app()
 
-# Ten blok if __name__ ... jest teraz używany tylko do lokalnego developmentu bez Dockera.
-# Gunicorn bezpośrednio używa obiektu 'app'.
+# Ten blok jest używany tylko przy uruchamianiu skryptu bezpośrednio (np. przez 'python run.py')
 if __name__ == '__main__':
-    app.run(debug=True)
+    # Używamy host='0.0.0.0' aby aplikacja była dostępna w Twojej sieci lokalnej,
+    # tak jak to robi Docker.
+    # Używamy debug=True dla wygodnego developmentu (automatyczne przeładowanie, debugger).
+    app.run(host='0.0.0.0', port=5000, debug=True)
