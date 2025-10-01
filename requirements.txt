@@ -9,3 +9,4 @@ pytz
 psycopg2-binary
 gunicorn
 pandas
+Flask-Login

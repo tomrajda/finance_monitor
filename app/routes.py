@@ -1,6 +1,10 @@
 
 
 from flask import render_template, request, redirect, url_for, flash, jsonify, current_app, Blueprint
+from flask_login import login_user, logout_user, login_required, current_user
+from werkzeug.security import check_password_hash
+import os
+from app import User
 from app import db
 from app.services import suggest_category_gemini, get_monthly_summary_gemini, get_yearly_summary_gemini
 # Upewnij się, że wszystkie modele są importowane
@@ -48,7 +52,41 @@ CATEGORY_COLORS_PALETTE = [
     'rgba(211, 84, 0, 0.85)'     # Pumpkin
 ]
 
+
+@main_bp.route('/login', methods=['GET', 'POST'])
+def login():
+    if current_user.is_authenticated:
+        return redirect(url_for('main.index'))
+    
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        
+        app_user = os.environ.get('APP_USER')
+        app_password = os.environ.get('APP_PASSWORD')
+
+        # Proste porównanie haseł (dla tego przypadku wystarczy)
+        # W prawdziwej aplikacji z wieloma użytkownikami hasła byłyby haszowane
+        if username == app_user and password == app_password:
+            user = User.get(username)
+            login_user(user) # "Zapamiętaj" użytkownika w sesji
+            flash('Zalogowano pomyślnie!', 'success')
+            next_page = request.args.get('next')
+            return redirect(next_page or url_for('main.index'))
+        else:
+            flash('Nieprawidłowy login lub hasło.', 'danger')
+
+    return render_template('login.html')
+
+@main_bp.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    flash('Wylogowano pomyślnie.', 'info')
+    return redirect(url_for('main.login'))
+
 @main_bp.route('/', methods=['GET'])
+@login_required
 def index():
     today = date.today()
     last_day_of_prev_month = today.replace(day=1) - timedelta(days=1)
@@ -183,6 +221,7 @@ def index():
                            )
 
 @main_bp.route('/rok', methods=['GET'])
+@login_required
 def yearly_summary():
     today = date.today()
     
@@ -233,6 +272,7 @@ def yearly_summary():
                            )
 
 @main_bp.route('/api/get_yearly_summary', methods=['GET'])
+@login_required
 def api_get_yearly_summary():
     if not current_app.config.get('GEMINI_API_KEY'):
         return jsonify({'error': 'Klucz API Gemini nie jest skonfigurowany.'}), 500
@@ -296,8 +336,8 @@ def api_get_yearly_summary():
     # Ale dla pewności zostawmy, jeśli frontend oczekuje gotowego HTML.
     return jsonify({'summary_html': summary_text.replace('\n', '<br>')})
 
-# --- NOWA TRASA API DLA PODSUMOWANIA GEMINI ---
 @main_bp.route('/api/get_gemini_summary', methods=['GET'])
+@login_required
 def api_get_gemini_summary():
     if not current_app.config.get('GEMINI_API_KEY'):
         return jsonify({'error': 'Klucz API Gemini nie jest skonfigurowany.', 'summary_html': '<p class="text-danger">Błąd: Klucz API Gemini nie jest skonfigurowany.</p>'}), 500
@@ -338,6 +378,7 @@ def api_get_gemini_summary():
     return jsonify({'summary_html': summary_html})
 
 @main_bp.route('/add_transaction', methods=['GET', 'POST'])
+@login_required
 def add_transaction():
     categories_all = Category.query.order_by(Category.name).all()
     accounts_db = Account.query.order_by(Account.name).all()
@@ -440,6 +481,7 @@ def add_transaction():
                            )
 
 @main_bp.route('/api/suggest_category', methods=['POST'])
+@login_required
 def api_suggest_category(): # Bez zmian
     if not current_app.config.get('GEMINI_API_KEY'): return jsonify({'error': 'Gemini API key not configured'}), 500
     data = request.get_json(); description = data.get('description')
@@ -454,6 +496,7 @@ def api_suggest_category(): # Bez zmian
     else: return jsonify({'error': 'Nie udało się zasugerować kategorii przez AI.'}), 500
 
 @main_bp.route('/manage_categories', methods=['GET', 'POST'])
+@login_required
 def manage_categories(): # Bez zmian
     if request.method == 'POST':
         category_name = request.form.get('category_name', '').strip().capitalize()
@@ -467,6 +510,7 @@ def manage_categories(): # Bez zmian
     return render_template('manage_categories.html', categories=Category.query.order_by(Category.name).all())
 
 @main_bp.route('/delete_category/<int:category_id>', methods=['POST'])
+@login_required
 def delete_category(category_id): # Bez zmian
     category_to_delete = Category.query.get_or_404(category_id)
     if category_to_delete.transactions: flash(f'Kategoria "{category_to_delete.name}" jest używana i nie może być usunięta.', 'warning')
@@ -475,6 +519,7 @@ def delete_category(category_id): # Bez zmian
 
 # --- Trasy dla Portfela ---
 @main_bp.route('/portfolio', methods=['GET'])
+@login_required
 def portfolio_index():
     portfolios = Portfolio.query.order_by(Portfolio.name).all()
     selected_portfolio_id = request.args.get('portfolio_id', type=int)
@@ -535,6 +580,7 @@ def portfolio_index():
                            )
 
 @main_bp.route('/portfolio/add', methods=['GET', 'POST'])
+@login_required
 def add_portfolio():
     # ... (kod funkcji bez zmian) ...
     asset_categories = AssetCategory.query.order_by(AssetCategory.name).all()
@@ -564,6 +610,7 @@ def add_portfolio():
 
 
 @main_bp.route('/portfolio/<int:portfolio_id>/edit', methods=['GET', 'POST'])
+@login_required
 def edit_portfolio(portfolio_id):
     # ... (kod funkcji bez zmian) ...
     portfolio_to_edit = Portfolio.query.get_or_404(portfolio_id)
@@ -598,6 +645,7 @@ def edit_portfolio(portfolio_id):
     return render_template('portfolio/edit_portfolio.html', portfolio=portfolio_to_edit, asset_categories=asset_categories, current_allocation=current_allocation)
 
 @main_bp.route('/portfolio/<int:portfolio_id>/add_asset', methods=['POST'])
+@login_required
 def add_asset_to_portfolio(portfolio_id):
     # ... (kod funkcji bez zmian) ...
     portfolio = Portfolio.query.get_or_404(portfolio_id)
@@ -636,6 +684,7 @@ def add_asset_to_portfolio(portfolio_id):
     return redirect(url_for('main.portfolio_index'))
 
 @main_bp.route('/portfolio/asset/<int:asset_id>/edit', methods=['GET', 'POST'])
+@login_required
 def edit_asset(asset_id):
     # ... (kod funkcji bez zmian, ale upewnij się, że przekazuje asset_value_history_entries) ...
     asset_to_edit = Asset.query.get_or_404(asset_id)
@@ -683,6 +732,7 @@ def edit_asset(asset_id):
 
 
 @main_bp.route('/portfolio/asset/<int:asset_id>/delete', methods=['POST'])
+@login_required
 def delete_asset(asset_id):
     # ... (kod funkcji bez zmian) ...
     asset_to_delete = Asset.query.get_or_404(asset_id)
@@ -695,6 +745,7 @@ def delete_asset(asset_id):
     return redirect(url_for('main.portfolio_index', portfolio_id=portfolio_id_redirect))
 
 @main_bp.route('/portfolio/<int:portfolio_id>/add_snapshot', methods=['POST'])
+@login_required
 def add_portfolio_snapshot(portfolio_id):
     # ... (kod funkcji bez zmian) ...
     portfolio = db.session.get(Portfolio, portfolio_id) 
@@ -718,7 +769,8 @@ def add_portfolio_snapshot(portfolio_id):
     return redirect(url_for('main.portfolio_index', portfolio_id=portfolio.id))
 
 
-@main_bp.route('/portfolio/snapshot/<int:snapshot_id>/delete', methods=['POST']) # Zmieniono nazwę z asset_value_history
+@main_bp.route('/portfolio/snapshot/<int:snapshot_id>/delete', methods=['POST'])
+@login_required
 def delete_portfolio_snapshot(snapshot_id): # Zmieniono nazwę funkcji
     snapshot_to_delete = PortfolioSnapshot.query.get_or_404(snapshot_id) # Użyj PortfolioSnapshot
     portfolio_id_redirect = snapshot_to_delete.portfolio_id
@@ -740,6 +792,7 @@ def delete_portfolio_snapshot(snapshot_id): # Zmieniono nazwę funkcji
 
 
 @main_bp.route('/portfolio/asset_value_history/<int:history_id>/delete', methods=['POST'])
+@login_required
 def delete_asset_value_history_entry(history_id):
     # Ta funkcja jest teraz dla indywidualnej historii aktywa, jeśli ją zachowujesz.
     # Jeśli historia jest tylko na poziomie portfela (PortfolioSnapshot), ta funkcja może nie być potrzebna
@@ -770,8 +823,8 @@ def delete_asset_value_history_entry(history_id):
 
 
 @main_bp.route('/portfolio/manage_asset_categories', methods=['GET', 'POST'])
+@login_required
 def manage_asset_categories():
-    # ... (kod funkcji bez zmian) ...
     if request.method == 'POST':
         name = request.form.get('category_name', '').strip().capitalize()
         if not name: flash("Nazwa kategorii aktywów nie może być pusta.", 'warning')

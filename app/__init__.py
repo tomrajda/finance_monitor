@@ -3,8 +3,28 @@ from flask_sqlalchemy import SQLAlchemy
 from config import Config
 import os
 from datetime import datetime
+from flask_login import LoginManager, UserMixin
+from werkzeug.security import check_password_hash 
 
 db = SQLAlchemy()
+login_manager = LoginManager()
+
+# NOWA "FAŁSZYWA" KLASA UŻYTKOWNIKA (nie jest modelem SQLAlchemy)
+class User(UserMixin):
+    def __init__(self, id):
+        self.id = id
+
+    @staticmethod
+    def get(user_id):
+        # W naszym przypadku mamy tylko jednego użytkownika z ID 'admin'
+        if user_id == os.environ.get('APP_USER'):
+            return User(user_id)
+        return None
+
+# Funkcja ładowania użytkownika wymagana przez Flask-Login
+@login_manager.user_loader
+def load_user(user_id):
+    return User.get(user_id)
 
 def create_app(config_class=Config):
     app = Flask(__name__, instance_relative_config=True)
@@ -16,6 +36,10 @@ def create_app(config_class=Config):
         pass
 
     db.init_app(app)
+    login_manager.init_app(app) # Inicjalizacja Flask-Login
+    login_manager.login_view = 'main.login' # Przekieruj niezalogowanych na stronę logowania
+    login_manager.login_message = "zaloguj się, aby uzyskać dostęp."
+    login_manager.login_message_category = "info"
 
     from app.routes import main_bp # Upewnij się, że import jest tutaj
     app.register_blueprint(main_bp)
