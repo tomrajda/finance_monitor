@@ -4,7 +4,7 @@ from app import db
 import os
 
 genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
-model = genai.GenerativeModel('gemini-pro') # Lub gemini-pro
+model = genai.GenerativeModel('gemini-2.5-flash') # Lub gemini-pro
 
 def suggest_category_gemini(description: str) -> tuple[str, bool]:
     """
