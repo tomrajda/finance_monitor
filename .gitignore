@@ -1,4 +1,18 @@
-venv/
-instance/
+# Python
 __pycache__/
+*.pyc
+
+# Virtual Environment
+venv/
+
+# Pliki środowiskowe (SEKRETY!)
 .env
+
+# Pliki IDE
+.vscode/
+.idea/
+
+# Pliki baz danych SQLite
+instance/
+*.db
+*.sqlite3
