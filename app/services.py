@@ -8,47 +8,68 @@ model = genai.GenerativeModel('gemini-2.5-flash') # Lub gemini-pro
 
 def suggest_category_gemini(description: str) -> tuple[str, bool]:
     """
-    Sugeruje kategorię wydatku na podstawie opisu, używając Gemini.
+    Sugeruje kategorię wydatku, preferując istniejące kategorie.
     Zwraca krotkę: (nazwa_kategorii, czy_jest_nowa_i_nie_istnieje_w_bazie)
     """
     if not description:
         return "Nieokreślona", False
 
-    existing_categories_db = Category.query.all()
+    # Pobierz wszystkie kategorie z wyjątkiem tych, które są tylko "wspólne"
+    # To zapobiega sugerowaniu np. "Living (Wspólne)" dla transakcji prywatnych
+    existing_categories_db = Category.query.filter_by(is_shared_expense=False).all()
     existing_categories_names = [cat.name for cat in existing_categories_db]
 
     prompt = f"""
-    Jesteś asystentem kategoryzacji wydatków. Na podstawie poniższego opisu wydatku, zasugeruj najbardziej odpowiednią kategorię.
-    Opis wydatku: "{description}"
+    Jesteś precyzyjnym asystentem do kategoryzacji transakcji bankowych. Twoim priorytetem jest użycie istniejącej kategorii, jeśli to tylko możliwe.
+    Przeanalizuj poniższą transakcję z polskiego banku.
 
-    Dostępne kategorie, których możesz użyć, jeśli pasują: {', '.join(existing_categories_names) if existing_categories_names else 'Brak zdefiniowanych kategorii.'}
+    **Dane transakcji:**
+    - Opis: "{description}"
 
-    Jeśli opis pasuje do jednej z istniejących kategorii, użyj jej nazwy.
-    Jeśli żadna z istniejących kategorii idealnie nie pasuje, zaproponuj NOWĄ, zwięzłą nazwę kategorii (1-3 słowa).
-    Odpowiedz TYLKO nazwą kategorii (istniejącą lub nową). Nie dodawaj żadnych wyjaśnień. Nazwa powinna być w języku polskim.
-    Przykład dla nowej:
-    Opis: "Bilet na pociąg do Krakowa"
-    Odpowiedź: "Podróże Pociągiem"
+    **Dostępne kategorie (użyj jednej z nich, jeśli pasuje):**
+    {', '.join(existing_categories_names)}
+
+    **Twoje zadania:**
+    1.  **PRZEANALIZUJ OPIS:** Zrozum, czego dotyczy transakcja (np. zakupy spożywcze, transport, subskrypcja).
+    2.  **WYBIERZ ISTNIEJĄCĄ KATEGORIĘ:** Sprawdź, czy opis transakcji pasuje do którejś z DOSTĘPNYCH KATEGORII. Jeśli tak, ZWRÓĆ DOKŁADNIE JEJ NAZWĘ. To jest najważniejsze zadanie.
+    3.  **ZAPROPONUJ NOWĄ:** Tylko i wyłącznie jeśli żadna z dostępnych kategorii absolutnie nie pasuje, zaproponuj NOWĄ, zwięzłą nazwę.
+    4.  **UŻYJ "NIEZNANA":** Tylko w skrajnym przypadku, gdy opis jest kompletnie niejasny (np. "Przelew własny", "Wpłata"), zwróć słowo "NIEZNANA".
+
+    **Odpowiedz TYLKO I WYŁĄCZNIE nazwą kategorii (istniejącą, nową lub "NIEZNANA"). Bez żadnych dodatkowych wyjaśnień.**
+
+    Przykład 1:
+    Opis: "ZABKA Z8755 K.2 KRAKOW"
+    Dostępne kategorie: Jedzenie, Transport, Rozrywka
+    Twoja odpowiedź: Jedzenie
+
+    Przykład 2:
+    Opis: "BILET MIESIECZNY MPK"
+    Dostępne kategorie: Jedzenie, Transport, Rozrywka
+    Twoja odpowiedź: Transport
+
+    Przykład 3:
+    Opis: "WIZYTA U STOMATOLOGA"
+    Dostępne kategorie: Jedzenie, Transport, Zdrowie
+    Twoja odpowiedź: Zdrowie
     """
     try:
+        model = genai.GenerativeModel('gemini-2.5-flash')
         response = model.generate_content(prompt)
-        suggested_category_name = response.text.strip()
-
-        if not suggested_category_name:
-            return "Nieokreślona", False
-
-        suggested_category_name = suggested_category_name.capitalize()
+        suggested_category_name = response.text.strip().capitalize()
+        if not suggested_category_name: return "Nieokreślona", False
         
-        category_obj = Category.query.filter(db.func.lower(Category.name) == db.func.lower(suggested_category_name)).first()
-        
-        if category_obj:
-            return category_obj.name, False 
-        else:
-            return suggested_category_name, True 
+        # Sprawdź, czy AI zwróciło jedną z istniejących kategorii
+        for cat_name in existing_categories_names:
+            if cat_name.lower() == suggested_category_name.lower():
+                return cat_name, False # Zwróć oficjalną nazwę z bazy, to nie jest nowa kategoria
+
+        # Jeśli nie, to jest to nowa propozycja lub "Nieznana"
+        return suggested_category_name, True 
             
     except Exception as e:
         print(f"Błąd Gemini (sugestia kategorii): {e}")
         return "Nieokreślona", False
+
 
 def get_monthly_summary_gemini(month_name: str, year: int, income_total: float, expenses_total: float, savings: float, expenses_by_category: dict) -> str:
     """Generuje podsumowanie miesiąca i porady finansowe używając Gemini."""

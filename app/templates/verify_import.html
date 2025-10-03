@@ -1,0 +1,108 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<style>
+    .table-responsive { max-height: 70vh; }
+    thead th { position: sticky; top: 0; background: var(--light-bg); z-index: 1; }
+</style>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h2>Weryfikacja Importu ({{ transactions|length }} transakcji)</h2>
+                <p class="text-muted mb-0">Sprawdź sugestie AI i uzupełnij brakujące informacje. Pola z sugestiami są już wstępnie wypełnione.</p>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('main.verify_import', task_id=task.id) }}">
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Data</th>
+                                    <th>Opis</th>
+                                    <th class="text-right">Kwota</th>
+                                    <th style="min-width: 180px;">Konto</th>
+                                    <th style="min-width: 150px;">Osoba</th>
+                                    <!-- ZMIANA TUTAJ: Usunięto dynamiczną część z nagłówka -->
+                                    <th style="min-width: 250px;">Kategoria</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for tx in transactions %}
+                                <tr data-tx-id="{{ tx.id }}">
+                                    <td>{{ tx.date.strftime('%Y-%m-%d') }}</td>
+                                    <td>
+                                        <small>{{ tx.description }}</small><br>
+                                        <!-- Sugestia AI jest teraz tutaj, pod opisem -->
+                                        <span class="badge badge-info">Sugestia AI: {{ tx.suggested_category_name }}</span>
+                                    </td>
+                                    <td class="text-right font-weight-bold {% if tx.transaction_type == 'INCOME' %}text-success{% else %}text-danger{% endif %}">
+                                        {{ "%.2f"|format(tx.amount) }} PLN
+                                    </td>
+                                    <td>
+                                        <select name="tx-{{ tx.id }}-account" class="form-control form-control-sm" required>
+                                            {% for acc in accounts %}
+                                                <option value="{{ acc.id }}" {% if 'Tomek' in acc.name %}selected{% endif %}>{{ acc.name }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <select name="tx-{{ tx.id }}-person" class="form-control form-control-sm" required>
+                                            <option value="{{ PERSON_TOMEK }}" {% if tx.amount < 5000 and tx.transaction_type == 'EXPENSE' %}selected{% endif %}>{{ PERSON_TOMEK }}</option>
+                                            <option value="{{ PERSON_TOCKA }}" {% if tx.amount >= 5000 or tx.transaction_type == 'INCOME' %}selected{% endif %}>{{ PERSON_TOCKA }}</option>
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <select name="tx-{{ tx.id }}-category" class="form-control form-control-sm category-select">
+                                            <option value="">-- Wybierz z listy --</option>
+                                            {% for cat in categories %}
+                                            <option value="{{ cat.id }}" {% if cat.id == tx.preselected_category_id %}selected{% endif %}>{{ cat.name }}</option>
+                                            {% endfor %}
+                                            <option value="new_category" {% if tx.is_new_suggestion %}selected{% endif %}>-- Stwórz nową... --</option>
+                                        </select>
+                                        <input type="text" 
+                                               name="tx-{{ tx.id }}-new_category_name" 
+                                               class="form-control form-control-sm mt-1 new-category-input {% if not tx.is_new_suggestion %}d-none{% endif %}" 
+                                               placeholder="Nazwa nowej kategorii" 
+                                               value="{% if tx.is_new_suggestion %}{{ tx.suggested_category_name }}{% endif %}">
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    <button type="submit" class="btn btn-success float-right mt-3">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-check2-circle" viewBox="0 0 16 16"><path d="M2.5 8a5.5 5.5 0 0 1 8.25-4.764.5.5 0 0 0 .5-.866A6.5 6.5 0 1 0 14.5 8a.5.5 0 0 0-1 0 5.5 5.5 0 1 1-11 0z"/><path d="M15.354 3.354a.5.5 0 0 0-.708-.708L8 9.293 5.354 6.646a.5.5 0 1 0-.708.708l3 3a.5.5 0 0 0 .708 0l7-7z"/></svg>
+                        Zatwierdź i Zakończ Import
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.category-select').forEach(select => {
+        select.addEventListener('change', function() {
+            const row = this.closest('tr');
+            const newInput = row.querySelector('.new-category-input');
+            const isNew = this.value === 'new_category';
+            
+            newInput.classList.toggle('d-none', !isNew);
+
+            if (isNew) {
+                newInput.setAttribute('required', 'required');
+                newInput.focus();
+            } else {
+                newInput.removeAttribute('required');
+            }
+        });
+    });
+});
+</script>
+{% endblock %}

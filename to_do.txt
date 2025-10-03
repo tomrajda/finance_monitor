@@ -1,3 +1,2 @@
--kolor do bazy danych zeby mial zawsze ten sam na wykresie unikalny
--Postęp w Osiąganiu Celu Oszczędnościowego (2025) - naprawa zle wartosdci
-=Rozkład Wydatków YTD (2025) - ascdeing order
+-wybranie na poczatku przed miportem konta i osoby
+-czy to jest jedno zapytanie api gemini czy to jest x14 zapytan

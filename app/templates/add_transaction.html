@@ -11,10 +11,53 @@
     .date-control-group .btn { margin-left: 0.5rem; flex-shrink: 0; }
 </style>
 
+<!-- NOWE OKNO MODALNE DO IMPORTU CSV -->
+<div class="modal fade" id="importCsvModal" tabindex="-1" role="dialog" aria-labelledby="importCsvModalLabel" aria-hidden="true">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="importCsvModalLabel">Importuj Transakcje z Pliku CSV</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+      </div>
+      <div class="modal-body">
+        <form id="csvUploadForm" action="{{ url_for('main.start_import') }}" method="POST" enctype="multipart/form-data">
+            <div class="form-group">
+                <label for="bankSelect">Wybierz bank:</label>
+                <select class="form-control" id="bankSelect" name="bank_name" required>
+                    <option value="ing">ING Bank Śląski</option>
+                    <option value="pko">PKO BP (wkrótce)</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="csvFile">Wybierz plik CSV:</label>
+                <div class="custom-file">
+                    <input type="file" class="custom-file-input" id="csvFile" name="csv_file" accept=".csv" required>
+                    <label class="custom-file-label" for="csvFile">Wybierz plik...</label>
+                </div>
+            </div>
+            <p class="text-muted"><small>Plik zostanie przetworzony w tle. Zostaniesz przekierowany na stronę z postępem.</small></p>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Anuluj</button>
+        <button type="submit" form="csvUploadForm" class="btn btn-primary">Rozpocznij Import</button>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- KONIEC MODALA -->
+
 <div class="row justify-content-center">
     <div class="col-md-8 col-lg-7">
         <div class="card">
             <div class="card-header"><h2 class="mb-0">nowa transakcja</h2></div> <!-- Zmieniono tekst -->
+            <!-- NOWY PRZYCISK OTWIERAJĄCY MODAL -->
+            <button type="button" class="btn btn-sm btn-outline-success" data-toggle="modal" data-target="#importCsvModal" title="Importuj transakcje z pliku CSV">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-file-earmark-arrow-up" viewBox="0 0 16 16"><path d="M8.5 11.5a.5.5 0 0 1-1 0V7.707L6.354 8.854a.5.5 0 1 1-.708-.708l2-2a.5.5 0 0 1 .708 0l2 2a.5.5 0 0 1-.708.708L8.5 7.707z"/><path d="M14 14V4.5L9.5 0H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2M9.5 3A1.5 1.5 0 0 0 8 4.5v1.543l1.5 2.253V4.5zM3 2a1 1 0 0 1 1-1h5.5v2A1.5 1.5 0 0 0 11 4.5h2V14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></svg>
+                importuj transakcje
+            </button>
+            </div>
+            <!-- KONIEC NOWEGO PRZYCISKU -->
             <div class="card-body">
                 <form method="POST" action="{{ url_for('main.add_transaction') }}" id="transactionForm">
                     <div class="form-group">
@@ -151,6 +194,17 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const dateInput = document.getElementById('date');
     const prevMonthBtn = document.getElementById('prevMonthBtn');
+
+    const csvFileInput = document.getElementById('csvFile');
+    if (csvFileInput) {
+        csvFileInput.addEventListener('change', function(e) {
+            const fileName = e.target.files[0] ? e.target.files[0].name : 'wybierz plik...';
+            const nextSibling = e.target.nextElementSibling;
+            if (nextSibling) {
+                nextSibling.innerText = fileName;
+            }
+        });
+    }
 
     // Użycie stałych przekazanych z Pythona
     const ACCOUNT_NAME_TOMEK_JS = "{{ ACCOUNT_NAME_TOMEK }}";

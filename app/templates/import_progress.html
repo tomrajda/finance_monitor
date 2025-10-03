@@ -1,0 +1,63 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8 text-center">
+        <h2 id="statusHeader">Przetwarzanie pliku CSV...</h2>
+        <div class="spinner-border text-primary mt-3" role="status" id="spinner">
+            <span class="sr-only">Ładowanie...</span>
+        </div>
+        <div class="progress mt-4" style="height: 25px;">
+            <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">0%</div>
+        </div>
+        <p id="progressText" class="mt-2 text-muted">Przetworzono 0 z 0 wierszy.</p>
+        <div id="errorMessage" class="alert alert-danger mt-3" style="display: none;"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const taskId = "{{ task.id }}";
+        const statusHeader = document.getElementById('statusHeader');
+        const spinner = document.getElementById('spinner');
+        const progressBar = document.getElementById('progressBar');
+        const progressText = document.getElementById('progressText');
+        const errorMessage = document.getElementById('errorMessage');
+
+        function checkStatus() {
+            fetch(`/import/status/${taskId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'PROCESSING') {
+                        const progress = data.total_rows > 0 ? (data.progress / data.total_rows * 100) : 0;
+                        progressBar.style.width = `${progress.toFixed(0)}%`;
+                        progressBar.innerText = `${progress.toFixed(0)}%`;
+                        progressBar.setAttribute('aria-valuenow', progress);
+                        progressText.innerText = `Przetworzono ${data.progress} z ${data.total_rows} wierszy.`;
+                        setTimeout(checkStatus, 2000); // Sprawdź ponownie za 2 sekundy
+                    } else if (data.status === 'VERIFICATION') {
+                        statusHeader.innerText = "Przetwarzanie zakończone. Przekierowanie do weryfikacji...";
+                        window.location.href = `/import/verify/${taskId}`;
+                    } else if (data.status === 'COMPLETED') {
+                        statusHeader.innerText = "Import zakończony pomyślnie!";
+                        spinner.style.display = 'none';
+                        // Przekierowanie na stronę główną po chwili
+                        setTimeout(() => { window.location.href = "{{ url_for('main.index') }}"; }, 2000);
+                    } else if (data.status === 'FAILED') {
+                        statusHeader.innerText = "Wystąpił błąd podczas importu.";
+                        spinner.style.display = 'none';
+                        errorMessage.innerText = data.error_message;
+                        errorMessage.style.display = 'block';
+                    }
+                })
+                .catch(err => {
+                    errorMessage.innerText = "Błąd połączenia z serwerem.";
+                    errorMessage.style.display = 'block';
+                });
+        }
+        setTimeout(checkStatus, 1000); // Zacznij sprawdzać po 1 sekundzie
+    });
+</script>
+{% endblock %}

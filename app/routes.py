@@ -1,5 +1,3 @@
-
-
 from flask import render_template, request, redirect, url_for, flash, jsonify, current_app, Blueprint
 from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import check_password_hash
@@ -15,6 +13,14 @@ from sqlalchemy import desc # <<< DODAJ TEN IMPORT
 import calendar
 import json
 import pytz
+import pandas as pd
+import io
+import uuid
+from threading import Thread
+import csv
+import io
+from flask import session
+from app.models import ImportTask, TempTransaction
 
 main_bp = Blueprint('main', __name__)
 
@@ -27,6 +33,8 @@ ACCOUNT_NAME_TOCKA = "Toćka Prywatne"
 ACCOUNT_NAME_WSPOLNE = "Wspólne Revolut"
 
 POLAND_TZ = pytz.timezone('Europe/Warsaw')
+
+tasks_in_progress = {}
 
 # Zaktualizowana, bardziej zróżnicowana paleta kolorów
 CATEGORY_COLORS_PALETTE = [
@@ -517,7 +525,219 @@ def delete_category(category_id): # Bez zmian
     else: db.session.delete(category_to_delete); db.session.commit(); flash(f'Kategoria "{category_to_delete.name}" usunięta.', 'success')
     return redirect(url_for('main.manage_categories'))
 
-# --- Trasy dla Portfela ---
+@main_bp.route('/import', methods=['GET', 'POST'])
+@login_required
+def import_transactions():
+    if request.method == 'POST':
+        # Logika uploadu pliku (opisana dalej)
+        pass
+    return render_template('import.html')
+
+@main_bp.route('/import/start', methods=['POST'])
+@login_required
+def start_import():
+    if 'csv_file' not in request.files:
+        flash('Nie wybrano pliku.', 'danger')
+        return redirect(url_for('main.add_transaction'))
+    
+    file = request.files['csv_file']
+    bank_name = request.form.get('bank_name')
+
+    if file.filename == '':
+        flash('Nie wybrano pliku.', 'danger')
+        return redirect(url_for('main.add_transaction'))
+
+    if file and file.filename.endswith('.csv'):
+        task_id = str(uuid.uuid4())
+        
+        # Zapisz plik tymczasowo (w produkcji lepiej użyć chmury, np. S3, ale na Render to zadziała)
+        filepath = os.path.join(current_app.instance_path, f"{task_id}.csv")
+        file.save(filepath)
+
+        # Stwórz zadanie w bazie danych
+        new_task = ImportTask(id=task_id, status='PENDING')
+        db.session.add(new_task)
+        db.session.commit()
+        
+        # Uruchom przetwarzanie w osobnym wątku
+        thread = Thread(target=process_csv_task, args=(current_app._get_current_object(), task_id, filepath, bank_name))
+        thread.daemon = True
+        thread.start()
+
+        # Przekieruj użytkownika na stronę śledzenia postępu
+        return redirect(url_for('main.import_progress', task_id=task_id))
+
+    flash('Nieprawidłowy format pliku. Proszę wybrać plik .csv.', 'warning')
+    return redirect(url_for('main.add_transaction'))
+
+
+@main_bp.route('/import/progress/<task_id>')
+@login_required
+def import_progress(task_id):
+    task = ImportTask.query.get(task_id)
+    if not task:
+        return "Nie znaleziono zadania.", 404
+    return render_template('import_progress.html', task=task)
+
+@main_bp.route('/import/status/<task_id>')
+@login_required
+def import_status(task_id):
+    task = ImportTask.query.get(task_id)
+    if not task:
+        return jsonify({'status': 'NOT_FOUND'}), 404
+    
+    return jsonify({
+        'status': task.status,
+        'progress': task.progress,
+        'total_rows': task.total_rows,
+        'summary': json.loads(task.summary) if task.summary else None,
+        'error_message': task.error_message
+    })
+
+def process_csv_task(app, task_id, filepath, bank_name):
+    with app.app_context():
+        task = ImportTask.query.get(task_id)
+        if not task: return
+
+        try:
+            task.status = 'PROCESSING'
+            db.session.commit()
+
+            df = pd.read_csv(filepath, encoding='cp1250', sep=',')
+            df.columns = df.columns.str.strip()
+
+            required_cols = {'Data transakcji', 'Dane transakcji', 'Tytuł', 'Kwota transakcji (waluta rachunku)'}
+            if not required_cols.issubset(df.columns):
+                raise ValueError(f"Brak wymaganych kolumn w pliku CSV. Wymagane: {required_cols}. Znaleziono: {set(df.columns)}")
+
+            df.dropna(subset=['Data transakcji', 'Kwota transakcji (waluta rachunku)'], inplace=True)
+            df = df[pd.to_datetime(df['Data transakcji'], format='%m/%d/%Y', errors='coerce').notna()]
+            if df.empty: raise ValueError("Plik CSV nie zawiera prawidłowych wierszy z transakcjami.")
+            
+            df = df.rename(columns={
+                'Data transakcji': 'date',
+                'Kwota transakcji (waluta rachunku)': 'amount'
+            })
+            df['full_description'] = df['Dane transakcji'].fillna('') + ' ' + df['Tytuł'].fillna('')
+            df['full_description'] = df['full_description'].str.strip()
+            
+            if df['amount'].dtype == 'object':
+                 df['amount'] = df['amount'].str.replace(',', '.', regex=False).astype(float)
+            df['date'] = pd.to_datetime(df['date'], format='%m/%d/%Y').dt.date
+
+            task.total_rows = len(df)
+            db.session.commit()
+            
+            all_categories = [c.name for c in Category.query.filter_by(is_shared_expense=False).all()]
+            temp_transactions_to_add = []
+
+            for index, row in df.iterrows():
+                amount = row['amount']
+                description = row['full_description']
+                
+                ai_input_description = f"Transakcja bankowa: {description}"
+                suggested_category, _ = suggest_category_gemini(ai_input_description)
+                
+                temp_tx = TempTransaction(
+                    task_id=task_id, raw_data=row.to_json(),
+                    transaction_type='INCOME' if amount > 0 else 'EXPENSE',
+                    amount=abs(amount), description=description, date=row['date'],
+                    suggested_category_name=suggested_category,
+                    status='PENDING_VERIFICATION' # Wszystkie trafiają do weryfikacji
+                )
+                temp_transactions_to_add.append(temp_tx)
+
+                task.progress = len(temp_transactions_to_add)
+                if len(temp_transactions_to_add) % 5 == 0: db.session.commit()
+            
+            db.session.bulk_save_objects(temp_transactions_to_add)
+            task.status = 'VERIFICATION' # Zawsze przechodzimy do weryfikacji
+            db.session.commit()
+
+        except Exception as e:
+            print(f"Błąd w zadaniu {task_id}: {e}")
+            task.status = 'FAILED'; task.error_message = str(e)
+            db.session.commit()
+        finally:
+            if os.path.exists(filepath): os.remove(filepath)
+
+@main_bp.route('/import/verify/<task_id>', methods=['GET', 'POST'])
+@login_required
+def verify_import(task_id):
+    task = ImportTask.query.get_or_404(task_id)
+    
+    if request.method == 'POST':
+        form_data = request.form
+        transactions_to_finalize = TempTransaction.query.filter_by(task_id=task_id).all()
+        new_transactions_to_add = []
+        
+        for tx in transactions_to_finalize:
+            prefix = f'tx-{tx.id}-'
+            category_choice = form_data.get(f'{prefix}category')
+            
+            final_category_id = None
+            if category_choice == 'new_category':
+                new_cat_name = form_data.get(f'{prefix}new_category_name', '').strip().capitalize()
+                if new_cat_name:
+                    # Sprawdź, czy taka kategoria już nie istnieje
+                    category = Category.query.filter(func.lower(Category.name) == func.lower(new_cat_name)).first()
+                    if not category:
+                        category = Category(name=new_cat_name, is_shared_expense=False)
+                        db.session.add(category)
+                        db.session.flush() # Aby uzyskać ID
+                    final_category_id = category.id
+            elif category_choice and category_choice.isdigit():
+                final_category_id = int(category_choice)
+            
+            # Pomiń transakcje, dla których nie wybrano kategorii (jeśli jakieś są)
+            if tx.transaction_type == 'EXPENSE' and not final_category_id:
+                continue
+
+            new_trans = Transaction(
+                amount=tx.amount,
+                date=tx.date,
+                description=tx.description,
+                is_income=(tx.transaction_type == 'INCOME'),
+                category_id=final_category_id,
+                account_id=int(form_data.get(f'{prefix}account')),
+                person=form_data.get(f'{prefix}person')
+            )
+            new_transactions_to_add.append(new_trans)
+
+        if new_transactions_to_add:
+            db.session.add_all(new_transactions_to_add)
+        
+        task.status = 'COMPLETED'
+        db.session.commit()
+
+        flash(f"Import zakończony! Dodano {len(new_transactions_to_add)} nowych transakcji.", "success")
+        return redirect(url_for('main.index'))
+
+    # Przygotowanie danych dla widoku GET
+    all_transactions_for_task = TempTransaction.query.filter_by(task_id=task_id).all()
+    categories = Category.query.order_by(Category.name).all()
+    accounts = Account.query.all()
+
+    # Pre-selekcja kategorii
+    for tx in all_transactions_for_task:
+        tx.preselected_category_id = None
+        tx.is_new_suggestion = False
+        
+        # Sprawdź, czy sugestia AI pasuje do istniejącej kategorii
+        found_category = next((c for c in categories if c.name.lower() == tx.suggested_category_name.lower()), None)
+        if found_category:
+            tx.preselected_category_id = found_category.id
+        elif tx.suggested_category_name not in ["Nieokreślona", "Inne"]:
+             tx.is_new_suggestion = True # AI zasugerowało nową nazwę
+
+    return render_template('verify_import.html', 
+                           task=task, 
+                           transactions=all_transactions_for_task, 
+                           categories=categories,
+                           accounts=accounts,
+                           PERSON_TOMEK=PERSON_TOMEK,
+                           PERSON_TOCKA=PERSON_TOCKA)
+
 @main_bp.route('/portfolio', methods=['GET'])
 @login_required
 def portfolio_index():
@@ -607,7 +827,6 @@ def add_portfolio():
             flash(f'Portfel "{name}" dodany.', 'success')
             return redirect(url_for('main.portfolio_index', portfolio_id=new_portfolio.id))
     return render_template('portfolio/add_portfolio.html', asset_categories=asset_categories)
-
 
 @main_bp.route('/portfolio/<int:portfolio_id>/edit', methods=['GET', 'POST'])
 @login_required
@@ -729,7 +948,6 @@ def edit_asset(asset_id):
                 db.session.rollback(); flash(f'Błąd aktualizacji: {e}', 'danger')
                 return render_template('portfolio/edit_asset.html', asset=asset_to_edit, asset_categories=asset_categories, asset_value_history_entries=asset_value_history_entries, form_data=request.form)
     return render_template('portfolio/edit_asset.html', asset=asset_to_edit, asset_categories=asset_categories, asset_value_history_entries=asset_value_history_entries, form_data=None)
-
 
 @main_bp.route('/portfolio/asset/<int:asset_id>/delete', methods=['POST'])
 @login_required
