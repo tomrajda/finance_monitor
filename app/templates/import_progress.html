@@ -1,16 +1,59 @@
 {% extends "layout.html" %}
+
 {% block content %}
+<style>
+    /* Style specyficzne dla tej strony */
+    #processing-card {
+        transition: all 0.5s ease-in-out;
+    }
+    .processing-icon {
+        font-size: 4rem; /* Duża ikona */
+        color: var(--secondary-color); /* Użyj koloru z Twojej palety */
+    }
+    .status-text {
+        min-height: 24px; /* Zapobiega "skakaniu" layoutu przy zmianie tekstu */
+    }
+    /* Animacja pulsowania dla spinnera */
+    .spinner-grow {
+        width: 1rem;
+        height: 1rem;
+    }
+</style>
+
 <div class="row justify-content-center">
-    <div class="col-md-8 text-center">
-        <h2 id="statusHeader">Przetwarzanie pliku CSV...</h2>
-        <div class="spinner-border text-primary mt-3" role="status" id="spinner">
-            <span class="sr-only">Ładowanie...</span>
+    <div class="col-md-8 col-lg-7">
+        <div class="card text-center" id="processing-card">
+            <div class="card-body p-4 p-md-5">
+                <!-- Ikona -->
+                <div class="mb-4">
+                    <i class="bi bi-hourglass-split processing-icon"></i>
+                </div>
+                
+                <!-- Główny nagłówek statusu -->
+                <h2 id="statusHeader" class="card-title">Przetwarzanie pliku...</h2>
+                
+                <!-- Dynamiczny tekst z informacjami -->
+                <p id="statusSubtext" class="text-muted status-text">Inicjalizowanie importu. Proszę czekać.</p>
+                
+                <!-- Pasek postępu -->
+                <div class="progress mt-4" style="height: 10px; border-radius: 5px;">
+                    <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+                </div>
+                
+                <!-- Licznik wierszy -->
+                <p id="progressText" class="mt-2 text-muted"><small>Przetworzono 0 z 0 wierszy</small></p>
+
+                <!-- Kontener na błąd -->
+                <div id="errorSection" style="display: none;">
+                    <hr>
+                    <p class="text-danger font-weight-bold">Wystąpił błąd!</p>
+                    <div id="errorMessage" class="alert alert-danger mt-2"></div>
+                </div>
+
+                <!-- Komunikat o sukcesie/przekierowaniu -->
+                <div id="successMessage" class="alert alert-success mt-4" style="display: none;"></div>
+            </div>
         </div>
-        <div class="progress mt-4" style="height: 25px;">
-            <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">0%</div>
-        </div>
-        <p id="progressText" class="mt-2 text-muted">Przetworzono 0 z 0 wierszy.</p>
-        <div id="errorMessage" class="alert alert-danger mt-3" style="display: none;"></div>
     </div>
 </div>
 {% endblock %}
@@ -18,46 +61,93 @@
 {% block scripts %}
 {{ super() }}
 <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        const taskId = "{{ task.id }}";
-        const statusHeader = document.getElementById('statusHeader');
-        const spinner = document.getElementById('spinner');
-        const progressBar = document.getElementById('progressBar');
-        const progressText = document.getElementById('progressText');
-        const errorMessage = document.getElementById('errorMessage');
+document.addEventListener('DOMContentLoaded', function() {
+    const taskId = "{{ task.id }}";
+    const statusHeader = document.getElementById('statusHeader');
+    const statusSubtext = document.getElementById('statusSubtext');
+    const progressBar = document.getElementById('progressBar');
+    const progressText = document.getElementById('progressText');
+    const errorSection = document.getElementById('errorSection');
+    const errorMessage = document.getElementById('errorMessage');
+    const successMessage = document.getElementById('successMessage');
+    const processingIcon = document.querySelector('.processing-icon');
 
-        function checkStatus() {
-            fetch(`/import/status/${taskId}`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.status === 'PROCESSING') {
-                        const progress = data.total_rows > 0 ? (data.progress / data.total_rows * 100) : 0;
-                        progressBar.style.width = `${progress.toFixed(0)}%`;
-                        progressBar.innerText = `${progress.toFixed(0)}%`;
-                        progressBar.setAttribute('aria-valuenow', progress);
-                        progressText.innerText = `Przetworzono ${data.progress} z ${data.total_rows} wierszy.`;
-                        setTimeout(checkStatus, 2000); // Sprawdź ponownie za 2 sekundy
-                    } else if (data.status === 'VERIFICATION') {
-                        statusHeader.innerText = "Przetwarzanie zakończone. Przekierowanie do weryfikacji...";
-                        window.location.href = `/import/verify/${taskId}`;
-                    } else if (data.status === 'COMPLETED') {
-                        statusHeader.innerText = "Import zakończony pomyślnie!";
-                        spinner.style.display = 'none';
-                        // Przekierowanie na stronę główną po chwili
-                        setTimeout(() => { window.location.href = "{{ url_for('main.index') }}"; }, 2000);
-                    } else if (data.status === 'FAILED') {
-                        statusHeader.innerText = "Wystąpił błąd podczas importu.";
-                        spinner.style.display = 'none';
+    function checkStatus() {
+        fetch(`/import/status/${taskId}`)
+            .then(response => {
+                if (!response.ok) { throw new Error('Błąd serwera'); }
+                return response.json();
+            })
+            .then(data => {
+                // Aktualizuj pasek postępu i tekst
+                if (data.total_rows > 0) {
+                    const progress = data.progress / data.total_rows * 100;
+                    progressBar.style.width = `${progress.toFixed(0)}%`;
+                    progressBar.setAttribute('aria-valuenow', progress);
+                }
+                progressText.innerHTML = `<small>Przetworzono <strong>${data.progress}</strong> z <strong>${data.total_rows}</strong> wierszy</small>`;
+
+                switch (data.status) {
+                    case 'PROCESSING':
+                        statusHeader.innerText = "analiza transakcji...";
+                        statusSubtext.innerHTML = `
+                            Proszę czekać, Gemini pracuje <div class="spinner-grow spinner-grow-sm text-primary ml-1" role="status"></div>
+                        `;
+                        setTimeout(checkStatus, 2500); // Sprawdź ponownie za 2.5 sekundy
+                        break;
+                    
+                    case 'VERIFICATION':
+                        processingIcon.classList.remove('bi-hourglass-split');
+                        processingIcon.classList.add('bi-card-checklist'); // Ikona listy do sprawdzenia
+                        statusHeader.innerText = "wymagana weryfikacja";
+                        statusSubtext.innerText = "Niektóre transakcje wymagają Twojej uwagi.";
+                        successMessage.innerText = "Przetwarzanie zakończone. Przekierowanie do weryfikacji...";
+                        successMessage.style.display = 'block';
+                        setTimeout(() => { window.location.href = `/import/verify/${taskId}`; }, 2000);
+                        break;
+
+                    case 'COMPLETED':
+                        processingIcon.classList.remove('bi-hourglass-split');
+                        processingIcon.classList.add('bi-check2-circle'); // Ikona sukcesu
+                        processingIcon.style.color = 'var(--success)';
+                        statusHeader.innerText = "import zakończony!";
+                        statusSubtext.innerText = "Wszystkie transakcje zostały dodane.";
+                        progressBar.classList.remove('progress-bar-animated');
+                        progressBar.classList.add('bg-success');
+                        progressBar.style.width = '100%';
+                        setTimeout(() => { window.location.href = "{{ url_for('main.index') }}"; }, 2500);
+                        break;
+                    
+                    case 'FAILED':
+                        processingIcon.classList.remove('bi-hourglass-split');
+                        processingIcon.classList.add('bi-exclamation-triangle-fill'); // Ikona błędu
+                        processingIcon.style.color = 'var(--danger)';
+                        statusHeader.innerText = "Wystąpił błąd importu";
+                        statusSubtext.style.display = 'none';
                         errorMessage.innerText = data.error_message;
-                        errorMessage.style.display = 'block';
-                    }
-                })
-                .catch(err => {
-                    errorMessage.innerText = "Błąd połączenia z serwerem.";
-                    errorMessage.style.display = 'block';
-                });
-        }
-        setTimeout(checkStatus, 1000); // Zacznij sprawdzać po 1 sekundzie
-    });
+                        errorSection.style.display = 'block';
+                        progressBar.classList.remove('progress-bar-animated');
+                        progressBar.classList.add('bg-danger');
+                        break;
+                    
+                    default: // PENDING
+                        statusSubtext.innerText = "Oczekiwanie na rozpoczęcie zadania...";
+                        setTimeout(checkStatus, 2000);
+                        break;
+                }
+            })
+            .catch(err => {
+                console.error("Błąd odpytywania o status:", err);
+                statusHeader.innerText = "Błąd Połączenia";
+                statusSubtext.style.display = 'none';
+                errorMessage.innerText = "Nie można połączyć się z serwerem, aby sprawdzić status importu. Spróbuj odświeżyć stronę.";
+                errorSection.style.display = 'block';
+                processingIcon.classList.remove('bi-hourglass-split');
+                processingIcon.classList.add('bi-wifi-off');
+            });
+    }
+    // Zacznij sprawdzać status od razu
+    checkStatus(); 
+});
 </script>
 {% endblock %}

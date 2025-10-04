@@ -1,2 +1,2 @@
--wybranie na poczatku przed miportem konta i osoby
--czy to jest jedno zapytanie api gemini czy to jest x14 zapytan
+-co to jest addEventListener
+-baza testowa i produkcyjna

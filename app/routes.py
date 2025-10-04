@@ -1,26 +1,20 @@
 from flask import render_template, request, redirect, url_for, flash, jsonify, current_app, Blueprint
 from flask_login import login_user, logout_user, login_required, current_user
-from werkzeug.security import check_password_hash
 import os
 from app import User
 from app import db
 from app.services import suggest_category_gemini, get_monthly_summary_gemini, get_yearly_summary_gemini
-# Upewnij się, że wszystkie modele są importowane
 from app.models import Transaction, Category, Account, Portfolio, AssetCategory, Asset, AssetValueHistory, PortfolioSnapshot
 from datetime import datetime, date, timedelta 
-from sqlalchemy import extract, func, and_ # func i desc mogą być potrzebne
-from sqlalchemy import desc # <<< DODAJ TEN IMPORT
-import calendar
+from sqlalchemy import extract, func
+from sqlalchemy import desc
 import json
 import pytz
 import pandas as pd
-import io
 import uuid
 from threading import Thread
-import csv
-import io
-from flask import session
 from app.models import ImportTask, TempTransaction
+import time
 
 main_bp = Blueprint('main', __name__)
 
@@ -36,7 +30,6 @@ POLAND_TZ = pytz.timezone('Europe/Warsaw')
 
 tasks_in_progress = {}
 
-# Zaktualizowana, bardziej zróżnicowana paleta kolorów
 CATEGORY_COLORS_PALETTE = [
     'rgba(255, 99, 132, 0.85)',  # Różowy/Czerwony
     'rgba(54, 162, 235, 0.85)',  # Niebieski
@@ -59,7 +52,6 @@ CATEGORY_COLORS_PALETTE = [
     'rgba(9, 132, 227, 0.85)',   # Peter River Blue
     'rgba(211, 84, 0, 0.85)'     # Pumpkin
 ]
-
 
 @main_bp.route('/login', methods=['GET', 'POST'])
 def login():
@@ -488,9 +480,26 @@ def add_transaction():
                            ACCOUNT_NAME_WSPOLNE=ACCOUNT_NAME_WSPOLNE
                            )
 
+@main_bp.route('/transaction/delete/<int:transaction_id>', methods=['DELETE'])
+@login_required
+def delete_transaction(transaction_id):
+    # Znajdź transakcję w głównej tabeli
+    transaction_to_delete = Transaction.query.get(transaction_id)
+    
+    if transaction_to_delete:
+        try:
+            db.session.delete(transaction_to_delete)
+            db.session.commit()
+            return jsonify({'success': True, 'message': 'Transakcja została usunięta.'})
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({'success': False, 'message': f'Błąd bazy danych: {e}'}), 500
+    else:
+        return jsonify({'success': False, 'message': 'Nie znaleziono transakcji o podanym ID.'}), 404
+
 @main_bp.route('/api/suggest_category', methods=['POST'])
 @login_required
-def api_suggest_category(): # Bez zmian
+def api_suggest_category():
     if not current_app.config.get('GEMINI_API_KEY'): return jsonify({'error': 'Gemini API key not configured'}), 500
     data = request.get_json(); description = data.get('description')
     if not description: return jsonify({'error': 'Opis jest wymagany do sugestii.'}), 400
@@ -505,7 +514,7 @@ def api_suggest_category(): # Bez zmian
 
 @main_bp.route('/manage_categories', methods=['GET', 'POST'])
 @login_required
-def manage_categories(): # Bez zmian
+def manage_categories():
     if request.method == 'POST':
         category_name = request.form.get('category_name', '').strip().capitalize()
         is_shared = True if request.form.get('is_shared_expense') == 'on' else False
@@ -519,7 +528,7 @@ def manage_categories(): # Bez zmian
 
 @main_bp.route('/delete_category/<int:category_id>', methods=['POST'])
 @login_required
-def delete_category(category_id): # Bez zmian
+def delete_category(category_id):
     category_to_delete = Category.query.get_or_404(category_id)
     if category_to_delete.transactions: flash(f'Kategoria "{category_to_delete.name}" jest używana i nie może być usunięta.', 'warning')
     else: db.session.delete(category_to_delete); db.session.commit(); flash(f'Kategoria "{category_to_delete.name}" usunięta.', 'success')
@@ -569,7 +578,6 @@ def start_import():
 
     flash('Nieprawidłowy format pliku. Proszę wybrać plik .csv.', 'warning')
     return redirect(url_for('main.add_transaction'))
-
 
 @main_bp.route('/import/progress/<task_id>')
 @login_required
@@ -632,6 +640,9 @@ def process_csv_task(app, task_id, filepath, bank_name):
             temp_transactions_to_add = []
 
             for index, row in df.iterrows():
+
+                time.sleep(6.1)
+
                 amount = row['amount']
                 description = row['full_description']
                 
@@ -648,7 +659,7 @@ def process_csv_task(app, task_id, filepath, bank_name):
                 temp_transactions_to_add.append(temp_tx)
 
                 task.progress = len(temp_transactions_to_add)
-                if len(temp_transactions_to_add) % 5 == 0: db.session.commit()
+                if len(temp_transactions_to_add) % 2 == 0: db.session.commit()
             
             db.session.bulk_save_objects(temp_transactions_to_add)
             task.status = 'VERIFICATION' # Zawsze przechodzimy do weryfikacji
@@ -668,7 +679,18 @@ def verify_import(task_id):
     
     if request.method == 'POST':
         form_data = request.form
+        
+        # Pobierz konto i osobę dla CAŁEGO importu
+        account_id_for_import = form_data.get('import_account_id')
+        person_for_import = form_data.get('import_person')
+
+        if not account_id_for_import or not person_for_import:
+            flash("Musisz wybrać konto i osobę dla całego importu.", "danger")
+            # Przekieruj z powrotem, aby użytkownik mógł to naprawić
+            return redirect(url_for('main.verify_import', task_id=task_id))
+
         transactions_to_finalize = TempTransaction.query.filter_by(task_id=task_id).all()
+        newly_created_categories = {}
         new_transactions_to_add = []
         
         for tx in transactions_to_finalize:
@@ -679,28 +701,35 @@ def verify_import(task_id):
             if category_choice == 'new_category':
                 new_cat_name = form_data.get(f'{prefix}new_category_name', '').strip().capitalize()
                 if new_cat_name:
-                    # Sprawdź, czy taka kategoria już nie istnieje
                     category = Category.query.filter(func.lower(Category.name) == func.lower(new_cat_name)).first()
                     if not category:
                         category = Category(name=new_cat_name, is_shared_expense=False)
                         db.session.add(category)
-                        db.session.flush() # Aby uzyskać ID
+                        db.session.flush()
                     final_category_id = category.id
             elif category_choice and category_choice.isdigit():
                 final_category_id = int(category_choice)
-            
-            # Pomiń transakcje, dla których nie wybrano kategorii (jeśli jakieś są)
-            if tx.transaction_type == 'EXPENSE' and not final_category_id:
-                continue
+
+            # Użyj danych z TempTransaction, ponieważ konto i osoba są już ustawione
+            if tx.status == 'OK' and not final_category_id:
+                category = Category.query.filter(func.lower(Category.name) == func.lower(tx.suggested_category_name)).first()
+                if not category:
+                    new_cat_name = tx.suggested_category_name
+                    if "NOWA:" in new_cat_name.upper(): new_cat_name = new_cat_name.split(":", 1)[1].strip().capitalize()
+                    category = Category(name=new_cat_name, is_shared_expense=False)
+                    db.session.add(category)
+                    db.session.flush()
+                final_category_id = category.id
+
+            if (tx.transaction_type == 'EXPENSE' and not final_category_id):
+                continue # Pomiń wydatki bez kategorii
 
             new_trans = Transaction(
-                amount=tx.amount,
-                date=tx.date,
-                description=tx.description,
+                amount=tx.amount, date=tx.date, description=tx.description,
                 is_income=(tx.transaction_type == 'INCOME'),
                 category_id=final_category_id,
-                account_id=int(form_data.get(f'{prefix}account')),
-                person=form_data.get(f'{prefix}person')
+                account_id=int(account_id_for_import), # Użyj wartości z góry formularza
+                person=person_for_import              # Użyj wartości z góry formularza
             )
             new_transactions_to_add.append(new_trans)
 
@@ -708,27 +737,32 @@ def verify_import(task_id):
             db.session.add_all(new_transactions_to_add)
         
         task.status = 'COMPLETED'
+        TempTransaction.query.filter_by(task_id=task_id).delete()
         db.session.commit()
 
         flash(f"Import zakończony! Dodano {len(new_transactions_to_add)} nowych transakcji.", "success")
         return redirect(url_for('main.index'))
-
-    # Przygotowanie danych dla widoku GET
-    all_transactions_for_task = TempTransaction.query.filter_by(task_id=task_id).all()
+    
+    # --- LOGIKA GET ---
+    
+    all_transactions_for_task = TempTransaction.query.filter_by(task_id=task_id).order_by(TempTransaction.date).all()
+    
+    # Jeśli zadanie zostało przetworzone i nie ma nic do weryfikacji, przejdź do podsumowania/importu
+    if not all_transactions_for_task and task.status == 'VERIFICATION':
+         # Można by stworzyć osobną stronę podsumowania, na razie importujemy od razu
+        return redirect(url_for('main.verify_import', task_id=task_id), code=307)
+    
     categories = Category.query.order_by(Category.name).all()
     accounts = Account.query.all()
 
-    # Pre-selekcja kategorii
     for tx in all_transactions_for_task:
         tx.preselected_category_id = None
         tx.is_new_suggestion = False
-        
-        # Sprawdź, czy sugestia AI pasuje do istniejącej kategorii
         found_category = next((c for c in categories if c.name.lower() == tx.suggested_category_name.lower()), None)
         if found_category:
             tx.preselected_category_id = found_category.id
         elif tx.suggested_category_name not in ["Nieokreślona", "Inne"]:
-             tx.is_new_suggestion = True # AI zasugerowało nową nazwę
+             tx.is_new_suggestion = True
 
     return render_template('verify_import.html', 
                            task=task, 
@@ -736,7 +770,25 @@ def verify_import(task_id):
                            categories=categories,
                            accounts=accounts,
                            PERSON_TOMEK=PERSON_TOMEK,
-                           PERSON_TOCKA=PERSON_TOCKA)
+                           PERSON_TOCKA=PERSON_TOCKA
+                           )
+
+@main_bp.route('/import/delete_temp/<int:temp_tx_id>', methods=['DELETE'])
+@login_required
+def delete_temp_transaction(temp_tx_id):
+    # Znajdź transakcję tymczasową w bazie
+    tx_to_delete = TempTransaction.query.get(temp_tx_id)
+    
+    if tx_to_delete:
+        try:
+            db.session.delete(tx_to_delete)
+            db.session.commit()
+            return jsonify({'success': True, 'message': 'Transakcja usunięta.'})
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({'success': False, 'message': f'Błąd bazy danych: {e}'}), 500
+    else:
+        return jsonify({'success': False, 'message': 'Nie znaleziono transakcji.'}), 404
 
 @main_bp.route('/portfolio', methods=['GET'])
 @login_required
@@ -986,10 +1038,9 @@ def add_portfolio_snapshot(portfolio_id):
         flash(f'Wystąpił błąd podczas dodawania snapshotu: {e}', 'danger')
     return redirect(url_for('main.portfolio_index', portfolio_id=portfolio.id))
 
-
 @main_bp.route('/portfolio/snapshot/<int:snapshot_id>/delete', methods=['POST'])
 @login_required
-def delete_portfolio_snapshot(snapshot_id): # Zmieniono nazwę funkcji
+def delete_portfolio_snapshot(snapshot_id):
     snapshot_to_delete = PortfolioSnapshot.query.get_or_404(snapshot_id) # Użyj PortfolioSnapshot
     portfolio_id_redirect = snapshot_to_delete.portfolio_id
     
@@ -1007,7 +1058,6 @@ def delete_portfolio_snapshot(snapshot_id): # Zmieniono nazwę funkcji
         flash(f'Wystąpił błąd podczas usuwania snapshotu: {e}', 'danger')
         
     return redirect(url_for('main.portfolio_index', portfolio_id=portfolio_id_redirect))
-
 
 @main_bp.route('/portfolio/asset_value_history/<int:history_id>/delete', methods=['POST'])
 @login_required
@@ -1038,7 +1088,6 @@ def delete_asset_value_history_entry(history_id):
     elif portfolio_id_for_redirect: # Jeśli nie, ale znamy portfel
          return redirect(url_for('main.portfolio_index', portfolio_id=portfolio_id_for_redirect))
     return redirect(url_for('main.portfolio_index')) # Domyślnie
-
 
 @main_bp.route('/portfolio/manage_asset_categories', methods=['GET', 'POST'])
 @login_required

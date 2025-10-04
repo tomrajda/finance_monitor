@@ -1,6 +1,26 @@
 {% extends "layout.html" %}
 
 {% block content %}
+<style>
+    /* NOWA REGUŁA: Ustawia minimalną szerokość dla pól wyboru na tej stronie */
+    #month_select, #year_select {
+        min-width: 120px; /* Dostosuj tę wartość, jeśli potrzeba */
+    }
+    #year_select {
+        min-width: 80px; /* Dostosuj tę wartość, jeśli potrzeba */
+    }
+    .delete-main-tx-btn {
+        cursor: pointer;
+        opacity: 0.5;
+        transition: opacity 0.2s ease-in-out;
+        font-size: 1.1rem;
+    }
+    .delete-main-tx-btn:hover {
+        opacity: 1;
+        color: var(--danger);
+    }
+</style>
+
 <!-- ... (cały HTML bez zmian w stosunku do ostatniej wersji) ... -->
 <div class="row mb-3 align-items-center">
     <div class="col-lg-6 col-md-12 mb-3 mb-lg-0">
@@ -15,7 +35,7 @@
             </form>
             <button id="generateGeminiSummaryBtn" class="btn btn-sm btn-ai-gradient btn-rounded mb-2 mb-lg-0 ml-lg-2" title="Generuj podsumowanie AI">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-stars" viewBox="0 0 16 16"><path d="M7.657 6.247c.11-.33.576-.33.686 0l.645 1.937a2.89 2.89 0 0 0 1.829 1.828l1.936.645c.33.11.33.576 0 .686l-1.937.645a2.89 2.89 0 0 0-1.828 1.829l-.645 1.936a.361.361 0 0 1-.686 0l-.645-1.937a2.89 2.89 0 0 0-1.828-1.828l-1.937-.645a.361.361 0 0 1 0-.686l1.937-.645a2.89 2.89 0 0 0 1.828-1.828zM3.794 1.148a.217.217 0 0 1 .412 0l.387 1.162c.173.518.579.924 1.097 1.097l1.162.387a.217.217 0 0 1 0 .412l-1.162.387A1.73 1.73 0 0 0 4.593 5.69l-.387 1.162a.217.217 0 0 1-.412 0L3.407 5.69A1.73 1.73 0 0 0 2.31 4.593l-1.162-.387a.217.217 0 0 1 0-.412l1.162-.387A1.73 1.73 0 0 0 3.407 2.31zM10.863.099a.145.145 0 0 1 .274 0l.258.774c.115.346.386.617.732.732l.774.258a.145.145 0 0 1 0 .274l-.774.258a1.16 1.16 0 0 0-.732.732l-.258.774a.145.145 0 0 1-.274 0l-.258-.774a1.16 1.16 0 0 0-.732-.732l-.774-.258a.145.145 0 0 1 0-.274l.774-.258c.346-.115.617-.386.732-.732z"/></svg>
-                <span class="d-none d-lg-inline ml-1">Porady AI</span><span class="d-lg-none ml-1">AI</span>
+                <span class="d-none d-lg-inline ml-1">Gemini</span><span class="d-lg-none ml-1">AI</span>
             </button>
         </div>
     </div>
@@ -55,7 +75,23 @@
     <div class="col-md-12"><div class="card"><div class="card-header"><h4>Rozkład wydatków</h4></div><div class="card-body chart-container" style="height: 400px;">{% if expenses_by_category_overall_dict %}<div id="expensesByCategoryOverallDataContainer" data-chartdata='{{ expenses_by_category_overall_dict|tojson|safe }}' style="height: 100%; width: 100%;"><canvas id="expensesByCategoryOverallChart"></canvas></div>{% else %}<p class="text-muted text-center mt-3">Brak wydatków w tej kategorii.</p>{% endif %}</div></div></div>
 </div>
 <div class="row mt-4">
-    <div class="col-md-12"><div class="card"><div class="card-header"><h4>Transakcje</h4></div><div class="card-body p-0">{% if transactions %}<div class="table-responsive"><table class="table table-striped table-hover mb-0"><thead><tr><th>Data</th><th>Opis</th><th class="text-right">Kwota</th><th>Typ</th><th>Kategoria</th><th>Konto</th><th>Osoba</th></tr></thead><tbody>{% for t in transactions %}<tr class="{{ 'table-success-row' if t.is_income else 'table-danger-row' }}"><td>{{ t.date.strftime('%d-%m-%Y') }}</td><td>{{ t.description or "-" }}</td><td class="text-right font-weight-bold">{{ "%.2f"|format(t.amount) }} PLN</td><td><span class="badge badge-{{ 'success' if t.is_income else 'danger' }}">{{ "przychód" if t.is_income else "wydatek" }}</span></td><td>{{ t.category.name if t.category else '-' }}</td><td>{{ t.account.name }}</td><td>{{ t.person }}</td></tr>{% endfor %}</tbody></table></div>{% else %}<p class="text-center text-muted p-3">Brak transakcji w wybranym okresie.</p>{% endif %}</div></div></div>
+    <div class="col-md-12"><div class="card"><div class="card-header"><h4>Transakcje</h4></div><div class="card-body p-0">{% if transactions %}<div class="table-responsive"><table class="table table-striped table-hover mb-0"><thead><tr><th>Data</th><th>Opis</th><th class="text-right">Kwota</th><th>Typ</th><th>Kategoria</th><th>Konto</th><th>Osoba</th><th></th>
+    </tr>
+</thead>
+<tbody>
+    {% for t in transactions %}
+    <tr class="{{ 'table-success-row' if t.is_income else 'table-danger-row' }}">
+        <td>{{ t.date.strftime('%d-%m-%Y') }}</td>
+        <td>{{ t.description or "-" }}</td>
+        <td class="text-right font-weight-bold">{{ "%.2f"|format(t.amount) }} PLN</td>
+        <td><span class="badge badge-{{ 'success' if t.is_income else 'danger' }}">{{ "przychód" if t.is_income else "wydatek" }}</span></td>
+        <td>{{ t.category.name if t.category else '-' }}</td>
+        <td>{{ t.account.name }}</td>
+        <td>{{ t.person }}</td>
+        <td class="align-middle text-center">
+            <i class="bi bi-trash-fill delete-main-tx-btn" data-tx-id="{{ t.id }}" title="Usuń"></i>
+        </td>
+    </tr>{% endfor %}</tbody></table></div>{% else %}<p class="text-center text-muted p-3">Brak transakcji w wybranym okresie.</p>{% endif %}</div></div></div>
 </div>
 
 {% endblock %}
@@ -299,6 +335,46 @@ document.addEventListener('DOMContentLoaded', function () {
             geminiSummarySection.style.display = 'none'; 
         });
     }
+
+    // --- NOWY BLOK KODU DO OBSŁUGI USUWANIA TRANSAKCJI ---
+    // Wstaw ten fragment kodu tutaj
+    document.querySelectorAll('.delete-main-tx-btn').forEach(button => {
+        button.addEventListener('click', function(event) {
+            event.preventDefault();
+            
+            const transactionId = this.dataset.txId;
+            const row = this.closest('tr');
+
+            if (confirm('Czy na pewno?')) {
+                fetch(`/transaction/delete/${transactionId}`, {
+                    method: 'DELETE',
+                    // Jeśli w przyszłości dodasz CSRF, token musi być tutaj
+                    headers: {
+                        // 'X-CSRFToken': '...' 
+                    }
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(err => { throw new Error(err.message || 'Błąd serwera') });
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.success) {
+                        // Przeładuj stronę, aby zaktualizować wszystkie podsumowania i wykresy.
+                        // To najprostsze i najbardziej niezawodne rozwiązanie.
+                        window.location.reload(); 
+                    } else {
+                        alert(`Błąd usuwania: ${data.message}`);
+                    }
+                })
+                .catch(error => {
+                    console.error('Błąd:', error);
+                    alert(`Wystąpił błąd sieciowy: ${error.message}`);
+                });
+            }
+        });
+    });
 });
 </script>
 {% endblock %}
