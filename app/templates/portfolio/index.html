@@ -72,18 +72,71 @@
 <div class="card mb-4">
     <div class="card-header">
         <div class="d-flex justify-content-between align-items-center">
-            <h4 class="mb-0">{{ selected_portfolio.name }}</h4>
-            <span class="h5 mb-0"><strong class="text-primary">{{ "%.2f"|format(total_portfolio_value) }} PLN</strong></span>
+            <div>
+                <h4 class="mb-0">{{ selected_portfolio.name }}</h4>
+                {% if selected_portfolio.description %}<p class="mb-0 mt-1 text-muted"><small>{{ selected_portfolio.description }}</small></p>{% endif %}
+            </div>
+            <div class="text-right">
+                <!-- Główna wartość portfela -->
+                <span class="h5 mb-0"><strong class="text-primary">{{ "%.2f"|format(total_portfolio_value) }} PLN</strong></span>
+                
+                <!-- Zysk/Strata Brutto (przed podatkiem) -->
+                {% if total_invested_amount > 0 %}
+                <div class="mt-1">
+                    <small class="font-weight-bold {% if profit_loss_gross > 0 %}text-success{% elif profit_loss_gross < 0 %}text-danger{% else %}text-muted{% endif %}">
+                        <span class="badge badge-light ml-1">brutto</span>
+                        {{ "%.2f"|format(profit_loss_gross) }} PLN 
+                        ({{ "%.2f"|format(profit_loss_gross_percent) }}%)
+                        {% if profit_loss_gross > 0 %}<i class="bi bi-arrow-up-right"></i>
+                        {% elif profit_loss_gross < 0 %}<i class="bi bi-arrow-down-right"></i>
+                        {% endif %}
+                    </small>
+                </div>
+
+                <!-- Zysk/Strata Netto (po podatku) -->
+                <div class="mt-1">
+                    <small class="font-weight-bold {% if profit_loss_net > 0 %}text-success{% elif profit_loss_net < 0 %}text-danger{% else %}text-muted{% endif %}">
+                        <span class="badge badge-light ml-1" title="Po odjęciu podatku Belki (19%)">netto</span>
+                        {{ "%.2f"|format(profit_loss_net) }} PLN 
+                        ({{ "%.2f"|format(profit_loss_net_percent) }}%)
+                        {% if profit_loss_net > 0 %}<i class="bi bi-arrow-up-right"></i>
+                        {% elif profit_loss_net < 0 %}<i class="bi bi-arrow-down-right"></i>
+                        {% endif %}
+                    </small>
+                </div>
+                {% endif %}
+            </div>
         </div>
-        {% if selected_portfolio.description %}<p class="mb-0 mt-1 text-muted"><small>{{ selected_portfolio.description }}</small></p>{% endif %}
     </div>
     <div class="card-body">
         <div id="addAssetFormContainer" class="mb-4 pt-3 border-bottom" style="display: none;">
             <h5>Dodaj aktywo</h5>
             <form method="POST" action="{{ url_for('main.add_asset_to_portfolio', portfolio_id=selected_portfolio.id) }}">
-                <div class="form-row"><div class="form-group col-md-12"><label for="asset_name_form">Nazwa</label><input type="text" class="form-control form-control-sm" id="asset_name_form" name="asset_name" required></div></div>
-                <div class="form-row"><div class="form-group col-md-6"><label for="asset_category_id_form">Kategoria</label><select name="asset_category_id" id="asset_category_id_form" class="form-control form-control-sm" required><option value="">--Wybierz--</option>{% for cat in asset_categories %}<option value="{{cat.id}}">{{cat.name}}</option>{% endfor %}</select></div><div class="form-group col-md-6"><label for="current_value_form">Wartość</label><input type="number" step="0.01" class="form-control form-control-sm" id="current_value_form" name="current_value" required></div></div>
-                <div class="form-row"><div class="form-group col-md-4"><label for="quantity_form">Ilość</label><input type="number" step="any" class="form-control form-control-sm" id="quantity_form" name="quantity"></div><div class="form-group col-md-4"><label for="currency_form">Waluta</label><input type="text" class="form-control form-control-sm" id="currency_form" name="currency" value="PLN" required></div><div class="form-group col-md-4"><label for="ticker_form">Ticker</label><input type="text" class="form-control form-control-sm" id="ticker_form" name="ticker"></div></div>
+                <div class="form-row"><div class="form-group col-md-12">
+                    <label for="asset_name_form">Nazwa</label><input type="text" class="form-control form-control-sm" id="asset_name_form" name="asset_name" required>
+                </div>
+            </div>
+                <div class="form-row">
+                    <div class="form-group col-md-6">
+                    <label for="asset_category_id_form">Kategoria</label><select name="asset_category_id" id="asset_category_id_form" class="form-control form-control-sm" required><option value="">--Wybierz--</option>{% for cat in asset_categories %}<option value="{{cat.id}}">{{cat.name}}</option>{% endfor %}</select>
+                </div>
+                <div class="form-group col-md-6">
+                    <label for="current_value_form">Wartość bieżąca</label>
+                    <input type="number" step="0.01" class="form-control form-control-sm" id="current_value_form" name="current_value" required>
+                </div>
+                <div class="form-group col-md-4">
+                    <label for="invested_amount_form">Kwota zainwestowana</label>
+                        <input type="number" step="0.01" class="form-control form-control-sm" id="invested_amount_form" name="invested_amount" placeholder="Opcjonalnie (domyślnie = wartość)">
+                </div>
+            </div>
+                <div class="form-row">
+                    <div class="form-group col-md-4">
+                        <label for="quantity_form">Ilość</label>
+                        <input type="number" step="any" class="form-control form-control-sm" id="quantity_form" name="quantity">
+                    </div>
+                    <div class="form-group col-md-4">
+                        <label for="currency_form">Waluta</label>
+                        <input type="text" class="form-control form-control-sm" id="currency_form" name="currency" value="PLN" required></div><div class="form-group col-md-4"><label for="ticker_form">Ticker</label><input type="text" class="form-control form-control-sm" id="ticker_form" name="ticker"></div></div>
                 <button type="submit" class="btn btn-primary btn-sm">Dodaj</button>
                 <button type="button" id="cancelAddAssetBtn" class="btn btn-outline-secondary btn-sm ml-2">Anuluj</button>
             </form>

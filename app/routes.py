@@ -801,6 +801,7 @@ def portfolio_index():
     portfolio_summary_data = {}
     target_allocation_data = {}
     current_total_portfolio_value = 0 
+    total_invested_amount = 0
     portfolio_snapshots_for_chart = {"labels": [], "values": []}
     portfolio_snapshots_list_for_table = []
 
@@ -816,6 +817,8 @@ def portfolio_index():
                 category_name = asset_item.asset_category_ref.name if asset_item.asset_category_ref else "Bez kategorii"
                 portfolio_summary_data[category_name] = portfolio_summary_data.get(category_name, 0) + asset_item.current_value
                 current_total_portfolio_value += asset_item.current_value
+                if asset_item.invested_amount:
+                    total_invested_amount += asset_item.invested_amount
             if selected_portfolio.target_allocation:
                 try: target_allocation_data = json.loads(selected_portfolio.target_allocation)
                 except json.JSONDecodeError: flash("Błąd w formacie modelowej alokacji.", "warning")
@@ -833,6 +836,24 @@ def portfolio_index():
             if selected_portfolio_id: 
                 flash(f"Nie znaleziono portfela o ID: {selected_portfolio_id}", "warning")
 
+    profit_loss = current_total_portfolio_value - total_invested_amount
+    profit_loss_percent = (profit_loss / total_invested_amount * 100) if total_invested_amount > 0 else 0
+
+    # Oblicz zysk/stratę brutto (przed podatkiem)
+    profit_loss_gross = current_total_portfolio_value - total_invested_amount
+    profit_loss_gross_percent = (profit_loss_gross / total_invested_amount * 100) if total_invested_amount > 0 else 0
+
+    # NOWA LOGIKA: Obliczanie podatku i zysku netto
+    tax_rate = 0.19  # Stawka podatku Belki (19%)
+    tax_to_pay = 0.0
+    profit_loss_net = profit_loss_gross # Zysk netto domyślnie równy brutto
+
+    if profit_loss_gross > 0:
+        tax_to_pay = profit_loss_gross * tax_rate
+        profit_loss_net = profit_loss_gross - tax_to_pay
+    
+    profit_loss_net_percent = (profit_loss_net / total_invested_amount * 100) if total_invested_amount > 0 else 0    
+
     return render_template('portfolio/index.html', 
                            portfolios=portfolios, 
                            selected_portfolio=selected_portfolio,
@@ -844,6 +865,14 @@ def portfolio_index():
                            grand_total_all_portfolios_value=grand_total_all_portfolios_value, 
                            portfolio_value_history_data=portfolio_snapshots_for_chart,
                            portfolio_snapshots_list=portfolio_snapshots_list_for_table,
+                           total_invested_amount=total_invested_amount,
+                           profit_loss_gross=profit_loss_gross,
+                           profit_loss_gross_percent=profit_loss_gross_percent,
+                           profit_loss=profit_loss,
+                           profit_loss_percent=profit_loss_percent,
+                           tax_to_pay=tax_to_pay,
+                           profit_loss_net=profit_loss_net,
+                           profit_loss_net_percent=profit_loss_net_percent,
                            ACCOUNT_NAME_TOMEK=ACCOUNT_NAME_TOMEK, 
                            ACCOUNT_NAME_TOCKA=ACCOUNT_NAME_TOCKA,
                            ACCOUNT_NAME_WSPOLNE=ACCOUNT_NAME_WSPOLNE,
@@ -924,6 +953,7 @@ def add_asset_to_portfolio(portfolio_id):
         name = request.form.get('asset_name', '').strip()
         asset_category_id = request.form.get('asset_category_id', type=int)
         current_value_str = request.form.get('current_value')
+        invested_amount = request.form.get('invested_amount')
         quantity_str = request.form.get('quantity')
         currency = request.form.get('currency', 'PLN').strip().upper()
         ticker = request.form.get('ticker', '').strip().upper() or None
@@ -943,7 +973,15 @@ def add_asset_to_portfolio(portfolio_id):
         if errors:
             for error in errors: flash(error, 'danger')
         else:
-            new_asset = Asset(name=name, ticker=ticker, current_value=current_value, quantity=quantity, currency=currency, portfolio_id=portfolio.id, asset_category_id=asset_category_id)
+            new_asset = Asset(
+                name=name, 
+                ticker=ticker, 
+                current_value=current_value,
+                invested_amount=float(invested_amount) if invested_amount else current_value,
+                quantity=quantity, 
+                currency=currency, 
+                portfolio_id=portfolio.id, 
+                asset_category_id=asset_category_id)
             db.session.add(new_asset)
             try:
                 db.session.commit()
@@ -964,6 +1002,7 @@ def edit_asset(asset_id):
     asset_value_history_entries = asset_to_edit.value_history.order_by(desc(AssetValueHistory.date)).limit(10).all() # Ważne dla szablonu
     if request.method == 'POST':
         original_value = asset_to_edit.current_value
+        invested_amount_str = request.form.get('invested_amount')
         asset_to_edit.name = request.form.get('asset_name', asset_to_edit.name).strip()
         asset_to_edit.asset_category_id = request.form.get('asset_category_id', asset_to_edit.asset_category_id, type=int)
         current_value_str = request.form.get('current_value')
@@ -988,6 +1027,16 @@ def edit_asset(asset_id):
             return render_template('portfolio/edit_asset.html', asset=asset_to_edit, asset_categories=asset_categories, asset_value_history_entries=asset_value_history_entries, form_data=request.form)
         else:
             asset_to_edit.current_value = new_current_value
+    
+            if invested_amount_str and invested_amount_str.strip() != "":
+                try:
+                    asset_to_edit.invested_amount = float(invested_amount_str)
+                except ValueError:
+                    errors.append("Nieprawidłowy format kwoty zainwestowanej.")
+            else:
+                # Jeśli pole jest puste, ustaw null lub wartość domyślną
+                asset_to_edit.invested_amount = None # Ustawiamy na None (NULL w bazie)
+
             asset_to_edit.quantity = new_quantity
             asset_to_edit.last_updated = datetime.utcnow()
             if new_current_value != original_value:

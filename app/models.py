@@ -34,8 +34,6 @@ class Transaction(db.Model):
         type_ = "Przychód" if self.is_income else "Wydatek"
         return f'<{type_} {self.amount} - {self.description or "Brak opisu"}>'
 
-# --- NOWE MODELE DLA PORTFELA INWESTYCYJNEGO ---
-
 class Portfolio(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), unique=True, nullable=False) # Np. "Portfel Długoterminowy", "Portfel Ryzykowny T&M"
@@ -67,6 +65,7 @@ class Asset(db.Model):
     ticker = db.Column(db.String(20), nullable=True, index=True) # Opcjonalny ticker giełdowy
     current_value = db.Column(db.Float, nullable=False, default=0.0) # Aktualna wartość całego aktywa
     quantity = db.Column(db.Float, nullable=True) # Ilość jednostek/akcji (jeśli dotyczy)
+    invested_amount = db.Column(db.Float, nullable=True)
     purchase_price_per_unit = db.Column(db.Float, nullable=True) # Cena zakupu za jednostkę (jeśli dotyczy)
     currency = db.Column(db.String(10), nullable=False, default="PLN") # Waluta aktywa
     last_updated = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
