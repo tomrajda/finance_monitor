@@ -1,5 +1,0 @@
-
--baza testowa i produkcyjna
-postgresql://postgres:?wRw-Qp/4D8WDct@db.rbgwrbqhtksmqhkfyuvj.supabase.co:5432/postgres
-
-npx supabase link --project-ref xkminetwtcdvgcqiwqnh

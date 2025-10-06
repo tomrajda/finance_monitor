@@ -1,30 +1,30 @@
 {% extends "layout.html" %}
 
 {% block content %}
-<h2>Zarządzaj Kategoriami Wydatków</h2>
+
 
 <div class="row">
     <div class="col-md-6">
         <div class="card">
-            <div class="card-header"><h4>Dodaj Nową Kategorię</h4></div>
+            <div class="card-header"><h4>Dodaj kategorię</h4></div>
             <div class="card-body">
                 <form method="POST" action="{{ url_for('main.manage_categories') }}">
                     <div class="form-group">
-                        <label for="category_name">Nazwa Kategorii:</label>
+                        <label for="category_name">Nazwa</label>
                         <input type="text" name="category_name" id="category_name" class="form-control" required>
                     </div>
                     <div class="form-group form-check">
                         <input type="checkbox" class="form-check-input" id="is_shared_expense" name="is_shared_expense">
-                        <label class="form-check-label" for="is_shared_expense">Kategoria wspólna (dzielona)</label>
+                        <label class="form-check-label" for="is_shared_expense">Kategoria wspólna</label>
                     </div>
-                    <button type="submit" class="btn btn-primary">Dodaj Kategorię</button>
+                    <button type="submit" class="btn btn-primary">Dodaj</button>
                 </form>
             </div>
         </div>
     </div>
     <div class="col-md-6">
         <div class="card">
-            <div class="card-header"><h4>Istniejące Kategorie</h4></div>
+            <div class="card-header"><h4>Kategorie</h4></div>
             <div class="card-body">
                 {% if categories %}
                 <ul class="list-group">

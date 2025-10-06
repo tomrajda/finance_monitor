@@ -37,7 +37,7 @@ def anonymize_amount(value):
         return value
     
     # Oblicz losowy modyfikator, np. 1.15, 0.92, 1.05
-    modifier = 1 + random.uniform(-0.20, 0.20)
+    modifier = 1 + random.uniform(-0.90, 0.90)
     
     new_value = value * modifier
     
