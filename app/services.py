@@ -1,6 +1,5 @@
 import google.generativeai as genai
 from app.models import Category
-from app import db
 import os
 
 genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))

@@ -3,7 +3,7 @@ Flask-SQLAlchemy
 SQLAlchemy
 python-dotenv
 google-generativeai
-Flask-WTF # Opcjonalnie, dla lepszych formularzy
+Flask-WTF
 Flask-Moment
 pytz
 psycopg2-binary

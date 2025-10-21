@@ -7,18 +7,9 @@ venv/
 
 # Pliki środowiskowe (SEKRETY!)
 .env
-.env.dev
-.env.prod
 
 # Pliki IDE
 .vscode/
 .idea/
 
-# Pliki baz danych SQLite
-instance/
-*.db
-*.sqlite3
-
-# Scripts migracji bazy danych
-migrations/
-migrate_data.py
+to_do.txt

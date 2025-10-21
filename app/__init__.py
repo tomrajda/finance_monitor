@@ -4,7 +4,6 @@ from config import Config
 import os
 from datetime import datetime
 from flask_login import LoginManager, UserMixin
-from werkzeug.security import check_password_hash 
 
 db = SQLAlchemy()
 login_manager = LoginManager()
