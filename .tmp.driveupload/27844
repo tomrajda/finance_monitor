@@ -1,0 +1,6 @@
+0000000000000000000000000000000000000000 5bbc8094b773385940049f31e3897bf53afdbcd3 Tomek <tomaszrajda@gmail.com> 1759335263 +0200	branch: Created from HEAD
+5bbc8094b773385940049f31e3897bf53afdbcd3 03ba7dc225c7f0bbb282a4f8a0bf4d39d5661da1 Tomek <tomaszrajda@gmail.com> 1759335284 +0200	commit: changes prod 1
+03ba7dc225c7f0bbb282a4f8a0bf4d39d5661da1 b50abea5c01701dde191b9cd8e6afb23defabbde Tomek <tomaszrajda@gmail.com> 1759337868 +0200	commit: update gemini
+b50abea5c01701dde191b9cd8e6afb23defabbde 0c34acbfde5b28e961c7e442dac2abb0a45684c4 Tomek <tomaszrajda@gmail.com> 1759338644 +0200	commit: changes related to gemini
+0c34acbfde5b28e961c7e442dac2abb0a45684c4 61b894ac1224a356c2120a5279542e92ee0c3b6c Tomek <tomaszrajda@gmail.com> 1759338751 +0200	commit: gemini ostateczny 10 1 2025
+61b894ac1224a356c2120a5279542e92ee0c3b6c efa705833f9cbae1403a14a71f347494f591ee64 Tomek <tomaszrajda@gmail.com> 1767451994 +0100	pull --tags git prod: Fast-forward
