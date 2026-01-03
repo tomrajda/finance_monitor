@@ -34,8 +34,6 @@ class Transaction(db.Model):
         type_ = "Przychód" if self.is_income else "Wydatek"
         return f'<{type_} {self.amount} - {self.description or "Brak opisu"}>'
 
-# --- NOWE MODELE DLA PORTFELA INWESTYCYJNEGO ---
-
 class Portfolio(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), unique=True, nullable=False) # Np. "Portfel Długoterminowy", "Portfel Ryzykowny T&M"
@@ -67,6 +65,7 @@ class Asset(db.Model):
     ticker = db.Column(db.String(20), nullable=True, index=True) # Opcjonalny ticker giełdowy
     current_value = db.Column(db.Float, nullable=False, default=0.0) # Aktualna wartość całego aktywa
     quantity = db.Column(db.Float, nullable=True) # Ilość jednostek/akcji (jeśli dotyczy)
+    invested_amount = db.Column(db.Float, nullable=True)
     purchase_price_per_unit = db.Column(db.Float, nullable=True) # Cena zakupu za jednostkę (jeśli dotyczy)
     currency = db.Column(db.String(10), nullable=False, default="PLN") # Waluta aktywa
     last_updated = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -109,3 +108,33 @@ class PortfolioSnapshot(db.Model):
     def __repr__(self):
         return f'<PortfolioSnapshot PortfolioID: {self.portfolio_id} - Time: {self.timestamp} - Value: {self.total_value} {self.currency}>'
 
+# NOWE MODELE DLA IMPORTU CSV
+class ImportTask(db.Model):
+    id = db.Column(db.String(36), primary_key=True) # Unikalne ID zadania
+    status = db.Column(db.String(50), default="PENDING") # PENDING, PROCESSING, VERIFICATION, COMPLETED, FAILED
+    progress = db.Column(db.Integer, default=0)
+    total_rows = db.Column(db.Integer, default=0)
+    summary = db.Column(db.Text, nullable=True) # Podsumowanie w formacie JSON
+    error_message = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+class TempTransaction(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    task_id = db.Column(db.String(36), db.ForeignKey('import_task.id'), nullable=False)
+    
+    # Dane odczytane z CSV i przetworzone przez AI
+    raw_data = db.Column(db.Text) # Oryginalny wiersz z CSV w JSON
+    transaction_type = db.Column(db.String(10)) # WYDATEK / PRZYCHÓD
+    amount = db.Column(db.Float)
+    description = db.Column(db.String(200))
+    date = db.Column(db.Date)
+    
+    suggested_category_name = db.Column(db.String(100))
+    status = db.Column(db.String(50), default="PENDING_AI") # PENDING_AI, OK, NEEDS_USER_INPUT
+    
+    # Finalne dane po weryfikacji przez użytkownika
+    final_category_id = db.Column(db.Integer, db.ForeignKey('category.id'), nullable=True)
+    final_account_id = db.Column(db.Integer, db.ForeignKey('account.id'), nullable=True)
+    final_person = db.Column(db.String(50), nullable=True)
+
+    task = db.relationship('ImportTask', backref=db.backref('temp_transactions', lazy=True, cascade="all, delete-orphan"))

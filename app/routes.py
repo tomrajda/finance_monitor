@@ -1,16 +1,20 @@
-
-
 from flask import render_template, request, redirect, url_for, flash, jsonify, current_app, Blueprint
+from flask_login import login_user, logout_user, login_required, current_user
+import os
+from app import User
 from app import db
 from app.services import suggest_category_gemini, get_monthly_summary_gemini, get_yearly_summary_gemini
-# Upewnij się, że wszystkie modele są importowane
 from app.models import Transaction, Category, Account, Portfolio, AssetCategory, Asset, AssetValueHistory, PortfolioSnapshot
 from datetime import datetime, date, timedelta 
-from sqlalchemy import extract, func, and_ # func i desc mogą być potrzebne
-from sqlalchemy import desc # <<< DODAJ TEN IMPORT
-import calendar
+from sqlalchemy import extract, func
+from sqlalchemy import desc
 import json
 import pytz
+import pandas as pd
+import uuid
+from threading import Thread
+from app.models import ImportTask, TempTransaction
+import time
 
 main_bp = Blueprint('main', __name__)
 
@@ -24,7 +28,8 @@ ACCOUNT_NAME_WSPOLNE = "Wspólne Revolut"
 
 POLAND_TZ = pytz.timezone('Europe/Warsaw')
 
-# Zaktualizowana, bardziej zróżnicowana paleta kolorów
+tasks_in_progress = {}
+
 CATEGORY_COLORS_PALETTE = [
     'rgba(255, 99, 132, 0.85)',  # Różowy/Czerwony
     'rgba(54, 162, 235, 0.85)',  # Niebieski
@@ -48,7 +53,40 @@ CATEGORY_COLORS_PALETTE = [
     'rgba(211, 84, 0, 0.85)'     # Pumpkin
 ]
 
+@main_bp.route('/login', methods=['GET', 'POST'])
+def login():
+    if current_user.is_authenticated:
+        return redirect(url_for('main.index'))
+    
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        
+        app_user = os.environ.get('APP_USER')
+        app_password = os.environ.get('APP_PASSWORD')
+
+        # Proste porównanie haseł (dla tego przypadku wystarczy)
+        # W prawdziwej aplikacji z wieloma użytkownikami hasła byłyby haszowane
+        if username == app_user and password == app_password:
+            user = User.get(username)
+            login_user(user) # "Zapamiętaj" użytkownika w sesji
+            flash('Zalogowano pomyślnie!', 'success')
+            next_page = request.args.get('next')
+            return redirect(next_page or url_for('main.index'))
+        else:
+            flash('Nieprawidłowy login lub hasło.', 'danger')
+
+    return render_template('login.html')
+
+@main_bp.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    flash('Wylogowano pomyślnie.', 'info')
+    return redirect(url_for('main.login'))
+
 @main_bp.route('/', methods=['GET'])
+@login_required
 def index():
     today = date.today()
     last_day_of_prev_month = today.replace(day=1) - timedelta(days=1)
@@ -183,6 +221,7 @@ def index():
                            )
 
 @main_bp.route('/rok', methods=['GET'])
+@login_required
 def yearly_summary():
     today = date.today()
     
@@ -233,6 +272,7 @@ def yearly_summary():
                            )
 
 @main_bp.route('/api/get_yearly_summary', methods=['GET'])
+@login_required
 def api_get_yearly_summary():
     if not current_app.config.get('GEMINI_API_KEY'):
         return jsonify({'error': 'Klucz API Gemini nie jest skonfigurowany.'}), 500
@@ -296,8 +336,8 @@ def api_get_yearly_summary():
     # Ale dla pewności zostawmy, jeśli frontend oczekuje gotowego HTML.
     return jsonify({'summary_html': summary_text.replace('\n', '<br>')})
 
-# --- NOWA TRASA API DLA PODSUMOWANIA GEMINI ---
 @main_bp.route('/api/get_gemini_summary', methods=['GET'])
+@login_required
 def api_get_gemini_summary():
     if not current_app.config.get('GEMINI_API_KEY'):
         return jsonify({'error': 'Klucz API Gemini nie jest skonfigurowany.', 'summary_html': '<p class="text-danger">Błąd: Klucz API Gemini nie jest skonfigurowany.</p>'}), 500
@@ -338,6 +378,7 @@ def api_get_gemini_summary():
     return jsonify({'summary_html': summary_html})
 
 @main_bp.route('/add_transaction', methods=['GET', 'POST'])
+@login_required
 def add_transaction():
     categories_all = Category.query.order_by(Category.name).all()
     accounts_db = Account.query.order_by(Account.name).all()
@@ -439,8 +480,26 @@ def add_transaction():
                            ACCOUNT_NAME_WSPOLNE=ACCOUNT_NAME_WSPOLNE
                            )
 
+@main_bp.route('/transaction/delete/<int:transaction_id>', methods=['DELETE'])
+@login_required
+def delete_transaction(transaction_id):
+    # Znajdź transakcję w głównej tabeli
+    transaction_to_delete = Transaction.query.get(transaction_id)
+    
+    if transaction_to_delete:
+        try:
+            db.session.delete(transaction_to_delete)
+            db.session.commit()
+            return jsonify({'success': True, 'message': 'Transakcja została usunięta.'})
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({'success': False, 'message': f'Błąd bazy danych: {e}'}), 500
+    else:
+        return jsonify({'success': False, 'message': 'Nie znaleziono transakcji o podanym ID.'}), 404
+
 @main_bp.route('/api/suggest_category', methods=['POST'])
-def api_suggest_category(): # Bez zmian
+@login_required
+def api_suggest_category():
     if not current_app.config.get('GEMINI_API_KEY'): return jsonify({'error': 'Gemini API key not configured'}), 500
     data = request.get_json(); description = data.get('description')
     if not description: return jsonify({'error': 'Opis jest wymagany do sugestii.'}), 400
@@ -454,7 +513,8 @@ def api_suggest_category(): # Bez zmian
     else: return jsonify({'error': 'Nie udało się zasugerować kategorii przez AI.'}), 500
 
 @main_bp.route('/manage_categories', methods=['GET', 'POST'])
-def manage_categories(): # Bez zmian
+@login_required
+def manage_categories():
     if request.method == 'POST':
         category_name = request.form.get('category_name', '').strip().capitalize()
         is_shared = True if request.form.get('is_shared_expense') == 'on' else False
@@ -467,14 +527,271 @@ def manage_categories(): # Bez zmian
     return render_template('manage_categories.html', categories=Category.query.order_by(Category.name).all())
 
 @main_bp.route('/delete_category/<int:category_id>', methods=['POST'])
-def delete_category(category_id): # Bez zmian
+@login_required
+def delete_category(category_id):
     category_to_delete = Category.query.get_or_404(category_id)
     if category_to_delete.transactions: flash(f'Kategoria "{category_to_delete.name}" jest używana i nie może być usunięta.', 'warning')
     else: db.session.delete(category_to_delete); db.session.commit(); flash(f'Kategoria "{category_to_delete.name}" usunięta.', 'success')
     return redirect(url_for('main.manage_categories'))
 
-# --- Trasy dla Portfela ---
+@main_bp.route('/import', methods=['GET', 'POST'])
+@login_required
+def import_transactions():
+    if request.method == 'POST':
+        # Logika uploadu pliku (opisana dalej)
+        pass
+    return render_template('import.html')
+
+@main_bp.route('/import/start', methods=['POST'])
+@login_required
+def start_import():
+    if 'csv_file' not in request.files:
+        flash('Nie wybrano pliku.', 'danger')
+        return redirect(url_for('main.add_transaction'))
+    
+    file = request.files['csv_file']
+    bank_name = request.form.get('bank_name')
+
+    if file.filename == '':
+        flash('Nie wybrano pliku.', 'danger')
+        return redirect(url_for('main.add_transaction'))
+
+    if file and file.filename.endswith('.csv'):
+        task_id = str(uuid.uuid4())
+        
+        # Zapisz plik tymczasowo (w produkcji lepiej użyć chmury, np. S3, ale na Render to zadziała)
+        filepath = os.path.join(current_app.instance_path, f"{task_id}.csv")
+        file.save(filepath)
+
+        # Stwórz zadanie w bazie danych
+        new_task = ImportTask(id=task_id, status='PENDING')
+        db.session.add(new_task)
+        db.session.commit()
+        
+        # Uruchom przetwarzanie w osobnym wątku
+        thread = Thread(target=process_csv_task, args=(current_app._get_current_object(), task_id, filepath, bank_name))
+        thread.daemon = True
+        thread.start()
+
+        # Przekieruj użytkownika na stronę śledzenia postępu
+        return redirect(url_for('main.import_progress', task_id=task_id))
+
+    flash('Nieprawidłowy format pliku. Proszę wybrać plik .csv.', 'warning')
+    return redirect(url_for('main.add_transaction'))
+
+@main_bp.route('/import/progress/<task_id>')
+@login_required
+def import_progress(task_id):
+    task = ImportTask.query.get(task_id)
+    if not task:
+        return "Nie znaleziono zadania.", 404
+    return render_template('import_progress.html', task=task)
+
+@main_bp.route('/import/status/<task_id>')
+@login_required
+def import_status(task_id):
+    task = ImportTask.query.get(task_id)
+    if not task:
+        return jsonify({'status': 'NOT_FOUND'}), 404
+    
+    return jsonify({
+        'status': task.status,
+        'progress': task.progress,
+        'total_rows': task.total_rows,
+        'summary': json.loads(task.summary) if task.summary else None,
+        'error_message': task.error_message
+    })
+
+def process_csv_task(app, task_id, filepath, bank_name):
+    with app.app_context():
+        task = ImportTask.query.get(task_id)
+        if not task: return
+
+        try:
+            task.status = 'PROCESSING'
+            db.session.commit()
+
+            df = pd.read_csv(filepath, encoding='cp1250', sep=',')
+            df.columns = df.columns.str.strip()
+
+            required_cols = {'Data transakcji', 'Dane transakcji', 'Tytuł', 'Kwota transakcji (waluta rachunku)'}
+            if not required_cols.issubset(df.columns):
+                raise ValueError(f"Brak wymaganych kolumn w pliku CSV. Wymagane: {required_cols}. Znaleziono: {set(df.columns)}")
+
+            df.dropna(subset=['Data transakcji', 'Kwota transakcji (waluta rachunku)'], inplace=True)
+            df = df[pd.to_datetime(df['Data transakcji'], format='%m/%d/%Y', errors='coerce').notna()]
+            if df.empty: raise ValueError("Plik CSV nie zawiera prawidłowych wierszy z transakcjami.")
+            
+            df = df.rename(columns={
+                'Data transakcji': 'date',
+                'Kwota transakcji (waluta rachunku)': 'amount'
+            })
+            df['full_description'] = df['Dane transakcji'].fillna('') + ' ' + df['Tytuł'].fillna('')
+            df['full_description'] = df['full_description'].str.strip()
+            
+            if df['amount'].dtype == 'object':
+                 df['amount'] = df['amount'].str.replace(',', '.', regex=False).astype(float)
+            df['date'] = pd.to_datetime(df['date'], format='%m/%d/%Y').dt.date
+
+            task.total_rows = len(df)
+            db.session.commit()
+            
+            all_categories = [c.name for c in Category.query.filter_by(is_shared_expense=False).all()]
+            temp_transactions_to_add = []
+
+            for index, row in df.iterrows():
+
+                time.sleep(6.1)
+
+                amount = row['amount']
+                description = row['full_description']
+                
+                ai_input_description = f"Transakcja bankowa: {description}"
+                suggested_category, _ = suggest_category_gemini(ai_input_description)
+                
+                temp_tx = TempTransaction(
+                    task_id=task_id, raw_data=row.to_json(),
+                    transaction_type='INCOME' if amount > 0 else 'EXPENSE',
+                    amount=abs(amount), description=description, date=row['date'],
+                    suggested_category_name=suggested_category,
+                    status='PENDING_VERIFICATION' # Wszystkie trafiają do weryfikacji
+                )
+                temp_transactions_to_add.append(temp_tx)
+
+                task.progress = len(temp_transactions_to_add)
+                if len(temp_transactions_to_add) % 2 == 0: db.session.commit()
+            
+            db.session.bulk_save_objects(temp_transactions_to_add)
+            task.status = 'VERIFICATION' # Zawsze przechodzimy do weryfikacji
+            db.session.commit()
+
+        except Exception as e:
+            print(f"Błąd w zadaniu {task_id}: {e}")
+            task.status = 'FAILED'; task.error_message = str(e)
+            db.session.commit()
+        finally:
+            if os.path.exists(filepath): os.remove(filepath)
+
+@main_bp.route('/import/verify/<task_id>', methods=['GET', 'POST'])
+@login_required
+def verify_import(task_id):
+    task = ImportTask.query.get_or_404(task_id)
+    
+    if request.method == 'POST':
+        form_data = request.form
+        
+        # Pobierz konto i osobę dla CAŁEGO importu
+        account_id_for_import = form_data.get('import_account_id')
+        person_for_import = form_data.get('import_person')
+
+        if not account_id_for_import or not person_for_import:
+            flash("Musisz wybrać konto i osobę dla całego importu.", "danger")
+            # Przekieruj z powrotem, aby użytkownik mógł to naprawić
+            return redirect(url_for('main.verify_import', task_id=task_id))
+
+        transactions_to_finalize = TempTransaction.query.filter_by(task_id=task_id).all()
+        newly_created_categories = {}
+        new_transactions_to_add = []
+        
+        for tx in transactions_to_finalize:
+            prefix = f'tx-{tx.id}-'
+            category_choice = form_data.get(f'{prefix}category')
+            
+            final_category_id = None
+            if category_choice == 'new_category':
+                new_cat_name = form_data.get(f'{prefix}new_category_name', '').strip().capitalize()
+                if new_cat_name:
+                    category = Category.query.filter(func.lower(Category.name) == func.lower(new_cat_name)).first()
+                    if not category:
+                        category = Category(name=new_cat_name, is_shared_expense=False)
+                        db.session.add(category)
+                        db.session.flush()
+                    final_category_id = category.id
+            elif category_choice and category_choice.isdigit():
+                final_category_id = int(category_choice)
+
+            # Użyj danych z TempTransaction, ponieważ konto i osoba są już ustawione
+            if tx.status == 'OK' and not final_category_id:
+                category = Category.query.filter(func.lower(Category.name) == func.lower(tx.suggested_category_name)).first()
+                if not category:
+                    new_cat_name = tx.suggested_category_name
+                    if "NOWA:" in new_cat_name.upper(): new_cat_name = new_cat_name.split(":", 1)[1].strip().capitalize()
+                    category = Category(name=new_cat_name, is_shared_expense=False)
+                    db.session.add(category)
+                    db.session.flush()
+                final_category_id = category.id
+
+            if (tx.transaction_type == 'EXPENSE' and not final_category_id):
+                continue # Pomiń wydatki bez kategorii
+
+            new_trans = Transaction(
+                amount=tx.amount, date=tx.date, description=tx.description,
+                is_income=(tx.transaction_type == 'INCOME'),
+                category_id=final_category_id,
+                account_id=int(account_id_for_import), # Użyj wartości z góry formularza
+                person=person_for_import              # Użyj wartości z góry formularza
+            )
+            new_transactions_to_add.append(new_trans)
+
+        if new_transactions_to_add:
+            db.session.add_all(new_transactions_to_add)
+        
+        task.status = 'COMPLETED'
+        TempTransaction.query.filter_by(task_id=task_id).delete()
+        db.session.commit()
+
+        flash(f"Import zakończony! Dodano {len(new_transactions_to_add)} nowych transakcji.", "success")
+        return redirect(url_for('main.index'))
+    
+    # --- LOGIKA GET ---
+    
+    all_transactions_for_task = TempTransaction.query.filter_by(task_id=task_id).order_by(TempTransaction.date).all()
+    
+    # Jeśli zadanie zostało przetworzone i nie ma nic do weryfikacji, przejdź do podsumowania/importu
+    if not all_transactions_for_task and task.status == 'VERIFICATION':
+         # Można by stworzyć osobną stronę podsumowania, na razie importujemy od razu
+        return redirect(url_for('main.verify_import', task_id=task_id), code=307)
+    
+    categories = Category.query.order_by(Category.name).all()
+    accounts = Account.query.all()
+
+    for tx in all_transactions_for_task:
+        tx.preselected_category_id = None
+        tx.is_new_suggestion = False
+        found_category = next((c for c in categories if c.name.lower() == tx.suggested_category_name.lower()), None)
+        if found_category:
+            tx.preselected_category_id = found_category.id
+        elif tx.suggested_category_name not in ["Nieokreślona", "Inne"]:
+             tx.is_new_suggestion = True
+
+    return render_template('verify_import.html', 
+                           task=task, 
+                           transactions=all_transactions_for_task, 
+                           categories=categories,
+                           accounts=accounts,
+                           PERSON_TOMEK=PERSON_TOMEK,
+                           PERSON_TOCKA=PERSON_TOCKA
+                           )
+
+@main_bp.route('/import/delete_temp/<int:temp_tx_id>', methods=['DELETE'])
+@login_required
+def delete_temp_transaction(temp_tx_id):
+    # Znajdź transakcję tymczasową w bazie
+    tx_to_delete = TempTransaction.query.get(temp_tx_id)
+    
+    if tx_to_delete:
+        try:
+            db.session.delete(tx_to_delete)
+            db.session.commit()
+            return jsonify({'success': True, 'message': 'Transakcja usunięta.'})
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({'success': False, 'message': f'Błąd bazy danych: {e}'}), 500
+    else:
+        return jsonify({'success': False, 'message': 'Nie znaleziono transakcji.'}), 404
+
 @main_bp.route('/portfolio', methods=['GET'])
+@login_required
 def portfolio_index():
     portfolios = Portfolio.query.order_by(Portfolio.name).all()
     selected_portfolio_id = request.args.get('portfolio_id', type=int)
@@ -484,6 +801,7 @@ def portfolio_index():
     portfolio_summary_data = {}
     target_allocation_data = {}
     current_total_portfolio_value = 0 
+    total_invested_amount = 0
     portfolio_snapshots_for_chart = {"labels": [], "values": []}
     portfolio_snapshots_list_for_table = []
 
@@ -499,6 +817,8 @@ def portfolio_index():
                 category_name = asset_item.asset_category_ref.name if asset_item.asset_category_ref else "Bez kategorii"
                 portfolio_summary_data[category_name] = portfolio_summary_data.get(category_name, 0) + asset_item.current_value
                 current_total_portfolio_value += asset_item.current_value
+                if asset_item.invested_amount:
+                    total_invested_amount += asset_item.invested_amount
             if selected_portfolio.target_allocation:
                 try: target_allocation_data = json.loads(selected_portfolio.target_allocation)
                 except json.JSONDecodeError: flash("Błąd w formacie modelowej alokacji.", "warning")
@@ -516,6 +836,24 @@ def portfolio_index():
             if selected_portfolio_id: 
                 flash(f"Nie znaleziono portfela o ID: {selected_portfolio_id}", "warning")
 
+    profit_loss = current_total_portfolio_value - total_invested_amount
+    profit_loss_percent = (profit_loss / total_invested_amount * 100) if total_invested_amount > 0 else 0
+
+    # Oblicz zysk/stratę brutto (przed podatkiem)
+    profit_loss_gross = current_total_portfolio_value - total_invested_amount
+    profit_loss_gross_percent = (profit_loss_gross / total_invested_amount * 100) if total_invested_amount > 0 else 0
+
+    # NOWA LOGIKA: Obliczanie podatku i zysku netto
+    tax_rate = 0.19  # Stawka podatku Belki (19%)
+    tax_to_pay = 0.0
+    profit_loss_net = profit_loss_gross # Zysk netto domyślnie równy brutto
+
+    if profit_loss_gross > 0:
+        tax_to_pay = profit_loss_gross * tax_rate
+        profit_loss_net = profit_loss_gross - tax_to_pay
+    
+    profit_loss_net_percent = (profit_loss_net / total_invested_amount * 100) if total_invested_amount > 0 else 0    
+
     return render_template('portfolio/index.html', 
                            portfolios=portfolios, 
                            selected_portfolio=selected_portfolio,
@@ -527,6 +865,14 @@ def portfolio_index():
                            grand_total_all_portfolios_value=grand_total_all_portfolios_value, 
                            portfolio_value_history_data=portfolio_snapshots_for_chart,
                            portfolio_snapshots_list=portfolio_snapshots_list_for_table,
+                           total_invested_amount=total_invested_amount,
+                           profit_loss_gross=profit_loss_gross,
+                           profit_loss_gross_percent=profit_loss_gross_percent,
+                           profit_loss=profit_loss,
+                           profit_loss_percent=profit_loss_percent,
+                           tax_to_pay=tax_to_pay,
+                           profit_loss_net=profit_loss_net,
+                           profit_loss_net_percent=profit_loss_net_percent,
                            ACCOUNT_NAME_TOMEK=ACCOUNT_NAME_TOMEK, 
                            ACCOUNT_NAME_TOCKA=ACCOUNT_NAME_TOCKA,
                            ACCOUNT_NAME_WSPOLNE=ACCOUNT_NAME_WSPOLNE,
@@ -535,6 +881,7 @@ def portfolio_index():
                            )
 
 @main_bp.route('/portfolio/add', methods=['GET', 'POST'])
+@login_required
 def add_portfolio():
     # ... (kod funkcji bez zmian) ...
     asset_categories = AssetCategory.query.order_by(AssetCategory.name).all()
@@ -562,8 +909,8 @@ def add_portfolio():
             return redirect(url_for('main.portfolio_index', portfolio_id=new_portfolio.id))
     return render_template('portfolio/add_portfolio.html', asset_categories=asset_categories)
 
-
 @main_bp.route('/portfolio/<int:portfolio_id>/edit', methods=['GET', 'POST'])
+@login_required
 def edit_portfolio(portfolio_id):
     # ... (kod funkcji bez zmian) ...
     portfolio_to_edit = Portfolio.query.get_or_404(portfolio_id)
@@ -598,6 +945,7 @@ def edit_portfolio(portfolio_id):
     return render_template('portfolio/edit_portfolio.html', portfolio=portfolio_to_edit, asset_categories=asset_categories, current_allocation=current_allocation)
 
 @main_bp.route('/portfolio/<int:portfolio_id>/add_asset', methods=['POST'])
+@login_required
 def add_asset_to_portfolio(portfolio_id):
     # ... (kod funkcji bez zmian) ...
     portfolio = Portfolio.query.get_or_404(portfolio_id)
@@ -605,6 +953,7 @@ def add_asset_to_portfolio(portfolio_id):
         name = request.form.get('asset_name', '').strip()
         asset_category_id = request.form.get('asset_category_id', type=int)
         current_value_str = request.form.get('current_value')
+        invested_amount = request.form.get('invested_amount')
         quantity_str = request.form.get('quantity')
         currency = request.form.get('currency', 'PLN').strip().upper()
         ticker = request.form.get('ticker', '').strip().upper() or None
@@ -624,7 +973,15 @@ def add_asset_to_portfolio(portfolio_id):
         if errors:
             for error in errors: flash(error, 'danger')
         else:
-            new_asset = Asset(name=name, ticker=ticker, current_value=current_value, quantity=quantity, currency=currency, portfolio_id=portfolio.id, asset_category_id=asset_category_id)
+            new_asset = Asset(
+                name=name, 
+                ticker=ticker, 
+                current_value=current_value,
+                invested_amount=float(invested_amount) if invested_amount else current_value,
+                quantity=quantity, 
+                currency=currency, 
+                portfolio_id=portfolio.id, 
+                asset_category_id=asset_category_id)
             db.session.add(new_asset)
             try:
                 db.session.commit()
@@ -636,6 +993,7 @@ def add_asset_to_portfolio(portfolio_id):
     return redirect(url_for('main.portfolio_index'))
 
 @main_bp.route('/portfolio/asset/<int:asset_id>/edit', methods=['GET', 'POST'])
+@login_required
 def edit_asset(asset_id):
     # ... (kod funkcji bez zmian, ale upewnij się, że przekazuje asset_value_history_entries) ...
     asset_to_edit = Asset.query.get_or_404(asset_id)
@@ -644,6 +1002,7 @@ def edit_asset(asset_id):
     asset_value_history_entries = asset_to_edit.value_history.order_by(desc(AssetValueHistory.date)).limit(10).all() # Ważne dla szablonu
     if request.method == 'POST':
         original_value = asset_to_edit.current_value
+        invested_amount_str = request.form.get('invested_amount')
         asset_to_edit.name = request.form.get('asset_name', asset_to_edit.name).strip()
         asset_to_edit.asset_category_id = request.form.get('asset_category_id', asset_to_edit.asset_category_id, type=int)
         current_value_str = request.form.get('current_value')
@@ -668,6 +1027,16 @@ def edit_asset(asset_id):
             return render_template('portfolio/edit_asset.html', asset=asset_to_edit, asset_categories=asset_categories, asset_value_history_entries=asset_value_history_entries, form_data=request.form)
         else:
             asset_to_edit.current_value = new_current_value
+    
+            if invested_amount_str and invested_amount_str.strip() != "":
+                try:
+                    asset_to_edit.invested_amount = float(invested_amount_str)
+                except ValueError:
+                    errors.append("Nieprawidłowy format kwoty zainwestowanej.")
+            else:
+                # Jeśli pole jest puste, ustaw null lub wartość domyślną
+                asset_to_edit.invested_amount = None # Ustawiamy na None (NULL w bazie)
+
             asset_to_edit.quantity = new_quantity
             asset_to_edit.last_updated = datetime.utcnow()
             if new_current_value != original_value:
@@ -681,8 +1050,8 @@ def edit_asset(asset_id):
                 return render_template('portfolio/edit_asset.html', asset=asset_to_edit, asset_categories=asset_categories, asset_value_history_entries=asset_value_history_entries, form_data=request.form)
     return render_template('portfolio/edit_asset.html', asset=asset_to_edit, asset_categories=asset_categories, asset_value_history_entries=asset_value_history_entries, form_data=None)
 
-
 @main_bp.route('/portfolio/asset/<int:asset_id>/delete', methods=['POST'])
+@login_required
 def delete_asset(asset_id):
     # ... (kod funkcji bez zmian) ...
     asset_to_delete = Asset.query.get_or_404(asset_id)
@@ -695,6 +1064,7 @@ def delete_asset(asset_id):
     return redirect(url_for('main.portfolio_index', portfolio_id=portfolio_id_redirect))
 
 @main_bp.route('/portfolio/<int:portfolio_id>/add_snapshot', methods=['POST'])
+@login_required
 def add_portfolio_snapshot(portfolio_id):
     # ... (kod funkcji bez zmian) ...
     portfolio = db.session.get(Portfolio, portfolio_id) 
@@ -717,9 +1087,9 @@ def add_portfolio_snapshot(portfolio_id):
         flash(f'Wystąpił błąd podczas dodawania snapshotu: {e}', 'danger')
     return redirect(url_for('main.portfolio_index', portfolio_id=portfolio.id))
 
-
-@main_bp.route('/portfolio/snapshot/<int:snapshot_id>/delete', methods=['POST']) # Zmieniono nazwę z asset_value_history
-def delete_portfolio_snapshot(snapshot_id): # Zmieniono nazwę funkcji
+@main_bp.route('/portfolio/snapshot/<int:snapshot_id>/delete', methods=['POST'])
+@login_required
+def delete_portfolio_snapshot(snapshot_id):
     snapshot_to_delete = PortfolioSnapshot.query.get_or_404(snapshot_id) # Użyj PortfolioSnapshot
     portfolio_id_redirect = snapshot_to_delete.portfolio_id
     
@@ -738,8 +1108,8 @@ def delete_portfolio_snapshot(snapshot_id): # Zmieniono nazwę funkcji
         
     return redirect(url_for('main.portfolio_index', portfolio_id=portfolio_id_redirect))
 
-
 @main_bp.route('/portfolio/asset_value_history/<int:history_id>/delete', methods=['POST'])
+@login_required
 def delete_asset_value_history_entry(history_id):
     # Ta funkcja jest teraz dla indywidualnej historii aktywa, jeśli ją zachowujesz.
     # Jeśli historia jest tylko na poziomie portfela (PortfolioSnapshot), ta funkcja może nie być potrzebna
@@ -768,10 +1138,9 @@ def delete_asset_value_history_entry(history_id):
          return redirect(url_for('main.portfolio_index', portfolio_id=portfolio_id_for_redirect))
     return redirect(url_for('main.portfolio_index')) # Domyślnie
 
-
 @main_bp.route('/portfolio/manage_asset_categories', methods=['GET', 'POST'])
+@login_required
 def manage_asset_categories():
-    # ... (kod funkcji bez zmian) ...
     if request.method == 'POST':
         name = request.form.get('category_name', '').strip().capitalize()
         if not name: flash("Nazwa kategorii aktywów nie może być pusta.", 'warning')

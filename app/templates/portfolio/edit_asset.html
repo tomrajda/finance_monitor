@@ -27,9 +27,14 @@
                     </div>
                     <div class="form-row">
                         <div class="form-group col-md-6">
-                            <label for="current_value">Aktualna wartość</label>
+                            <label for="current_value">Wartość bieżąca</label>
                             <input type="number" step="0.01" class="form-control" id="current_value" name="current_value" 
                                    value="{{ request.form.current_value if form_data else asset.current_value }}" required>
+                        </div>
+                        <div class="form-group col-md-6">
+                            <label for="invested_amount">Kwota zainwestowana</label>
+                            <input type="number" step="0.01" class="form-control" id="invested_amount" name="invested_amount" value="{{ request.form.invested_amount or asset.invested_amount }}" placeholder="Opcjonalnie">
+                            <small class="form-text text-muted">Całkowita suma wpłacona w to aktywo.</small>
                         </div>
                         <div class="form-group col-md-6">
                             <label for="currency">Waluta</label>
